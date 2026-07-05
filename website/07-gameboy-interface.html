@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game Boy Interface - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <a class="site-title" href="index.html">How to code GameBoy music.</a>
+      <section class="intro intro-title-only">
+        <div>
+          <h1>Now bottle the ideas in a Game Boy-like interface.</h1>
+        </div>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <h2>The Four Channels</h2>
+          <div class="concept-list">
+            <article>
+              <h3>CH1 Pulse + Sweep</h3>
+              <p>Pulse wave, duty, envelope, and pitch sweep.</p>
+            </article>
+            <article>
+              <h3>CH2 Pulse</h3>
+              <p>Pulse wave, duty, and envelope. Great for a second voice.</p>
+            </article>
+            <article>
+              <h3>CH3 Wave</h3>
+              <p>A tiny custom waveform table: 32 samples, 4 bits each.</p>
+            </article>
+            <article>
+              <h3>CH4 Noise</h3>
+              <p>LFSR noise for percussion and texture.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>A Software Interface In The Same Spirit</h2>
+          <pre><code class="language-python">pulse_1 = {
+    "enabled": True,
+    "frequency": 440,
+    "duty": 0.5,
+    "volume": 0.3,
+    "sweep": None,
+}
+
+pulse_2 = {
+    "enabled": True,
+    "frequency": 660,
+    "duty": 0.25,
+    "volume": 0.2,
+}
+
+wave = {
+    "enabled": True,
+    "frequency": 110,
+    "volume": 0.25,
+    "table": [-1, -0.5, 0, 0.5, 1, 0.5, 0, -0.5],
+}
+
+noise = {
+    "enabled": False,
+    "clock_hz": 5000,
+    "volume": 0.25,
+}</code></pre>
+          <p>This is not hardware-accurate yet. It is a teaching interface: each channel has the few settings we already explained.</p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Hardware Shape</h2>
+          <pre><code class="language-text">CH1: pulse + sweep
+CH2: pulse
+CH3: wavetable
+CH4: noise
+
+To start a pulse note on real hardware:
+  write duty and length
+  write envelope
+  write frequency low bits
+  write frequency high bits with trigger = 1</code></pre>
+          <p>That register interface comes later. The important thing now is that all four channels still reduce to offset patterns over time.</p>
+        </section>
+      </section>
+
+      <section class="next-links">
+        <a href="index.html">Back to index</a>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+  </body>
+</html>

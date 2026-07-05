@@ -33,6 +33,16 @@ PYTHONPATH=src python3 -m gameboy_audio.main
 
 No external dependencies are needed.
 
+## Noise experiments
+
+To render a pile of bit-feedback and continuous shift-register noise experiments:
+
+```bash
+python3 experiments/noise_machines.py
+```
+
+That writes WAV files into `out/noise_machines/`.
+
 ## Website
 
 The static tutorial site lives in `website/`.
@@ -42,11 +52,10 @@ Current site chapters:
 1. Samples and speaker offsets
 2. Wave shapes
 3. Note sequences
-4. Two pulse sequences
-5. Noise
-6. Composition
-7. Wavetable / CH3
-8. Game Boy-style channel interface
+4. Noise
+5. Composition
+6. Wavetable / CH3
+7. Game Boy-style channel interface
 
 For local development with live reload:
 

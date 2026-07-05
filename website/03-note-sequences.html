@@ -9,28 +9,19 @@
   </head>
   <body>
     <main class="shell">
-      <nav class="chapter-nav">
-        <a href="index.html">1. Samples</a>
-        <a href="02-wave-shapes.html">2. Wave Shapes</a>
-        <a href="03-note-sequences.html">3. Notes</a>
-        <a href="04-two-sequences.html">4. Two Sequences</a>
-        <a href="05-noise.html">5. Noise</a>
-        <a href="06-composition.html">6. Composition</a>
-        <a href="07-wavetable.html">7. Wavetable</a>
-        <a href="08-gameboy-interface.html">8. GB Interface</a>
-      </nav>
-
-      <section class="intro">
+      <a class="site-title" href="index.html">How to code GameBoy music.</a>
+      <section class="intro intro-title-only">
         <div>
-          <p class="eyebrow">Chapter 3</p>
-          <h1>A melody is one voice changing notes over time.</h1>
+          <h1>A Sequence Of Notes</h1>
         </div>
-        <p>Instead of one frequency forever, we render a note for a duration, then render the next note after it.</p>
       </section>
 
       <section class="chapter">
         <section class="chapter-panel">
-          <h2>Spelled Out</h2>
+          <p>
+            Basically. You put your notes in a list, then you loop through the note list,
+            and render out samples for each note, and append them all to a big list.
+          </p>
           <pre><code class="language-python">sample_rate = 44100
 
 def square_sample(sample_index, frequency, volume):
@@ -40,42 +31,406 @@ def square_sample(sample_index, frequency, volume):
         return volume
     return -volume
 
+# heres ur list of notes
 notes = [
-    # frequency, start time, duration
-    (261.63, 0.00, 0.20),  # C4
-    (329.63, 0.22, 0.20),  # E4
-    (392.00, 0.44, 0.20),  # G4
-    (523.25, 0.66, 0.30),  # C5
+    # frequency, duration
+    (261.63, 0.20),  # C4
+    (329.63, 0.20),  # E4
+    (392.00, 0.20),  # G4
+    (523.25, 0.30),  # C5
 ]
 
-seconds = 1.2
-num_samples = int(seconds * sample_rate)
-
 samples = []
-for _ in range(num_samples):
-    samples.append(0)
-# Start with silence: one zero offset for every sample slot.
 
-for frequency, start_time, duration in notes:
-    start = int(start_time * sample_rate)
+# go through each note
+for frequency, duration in notes:
     length = int(duration * sample_rate)
 
     for i in range(length):
-        output_index = start + i
-        if output_index >= len(samples):
-            break
-
-        samples[output_index] = square_sample(i, frequency, 0.25)</code></pre>
+        sample = square_sample(i, frequency, 0.25)
+        samples.append(sample)</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="single-sequence" aria-label="A single square-wave voice changing notes over time"></canvas>
+            <figcaption>Each orange segment is the same square voice at a new frequency. The cursor scans through the sample list from left to right.</figcaption>
+          </figure>
           <div class="code-actions">
-            <button data-play="sequence" data-status="#sequenceStatus">Play Sequence</button>
+            <button data-play="sequence" data-visual="single-sequence" data-status="#sequenceStatus">Play Sequence</button>
           </div>
           <p id="sequenceStatus" class="status-line" aria-live="polite"></p>
         </section>
 
         <section class="chapter-panel">
-          <h2>The New Idea</h2>
-          <p>The waveform list is still just offsets. The new trick is placement. A note has a start time and a duration, so we write its samples into one region of the bigger output list.</p>
+          <h2>Cool but thats just one after another.</h2>
+          <p>If the next note starts when the previous note ends, append the next note's samples after the first note's samples.</p>
+          <pre><code class="language-python">output = []
+
+for sample in first_note:
+    output.append(sample)
+
+for sample in second_note:
+    output.append(sample)</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="notes-sequence" aria-label="Samples for two notes placed one after another"></canvas>
+            <figcaption>The cursor scans through the final output. First it reads the first note, then the second note.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="compose-sequence" data-visual="notes-sequence" data-status="#noteCompositeStatus">Play One After Another</button>
+          </div>
         </section>
+
+        <section class="chapter-panel">
+          <h2>Notes can overlap.</h2>
+          <p>
+            You can play notes at the same time by just adding the samples to eachother.
+            The total volume of two waves of vol <code>0.5</code> will end up being
+            <code>1.0</code> bc its added on top, but its fine this is an okay way to mix
+            notes for us.
+          </p>
+          <p>
+            You could clamp the number with <code>min</code> and <code>max</code>, but that
+            changes the wave shape. Thats not clean mixing. Its more like distortion. For now
+            the clean trick is boring: keep each note quiet enough that the added result does
+            not go past <code>-1.0</code> or <code>1.0</code>.
+          </p>
+          <p>
+            Lets change our code so we can render a sequence but notes can overlap. So you
+            do <code>render_note</code> and pass in the big list, and it will mix it into
+            the existing list.
+          </p>
+          <pre><code class="language-python">sample_rate = 44100
+
+def square_sample(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    if phase < 0.5:
+        return volume
+    return -volume
+
+
+def render_note(output, start_time, duration, frequency, volume):
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
+
+    for sample_index in range(num_samples):
+        output_index = start_index + sample_index
+
+        if output_index >= len(output):
+            break
+
+        note_sample = square_sample(sample_index, frequency, volume)
+
+        # += means mix this note into whatever is already there.
+        output[output_index] += note_sample
+
+
+notes = [
+    # frequency, start time, duration, volume
+    (220.00, 0.00, 0.65, 0.35),
+    (330.00, 0.35, 0.65, 0.35),
+]
+
+# First, figure out how long the output list needs to be.
+# Each note ends at its start time plus its duration.
+# The note that ends farthest to the right decides the list size.
+end_time = 0
+
+for frequency, start_time, duration, volume in notes:
+    note_end_time = start_time + duration
+
+    if note_end_time > end_time:
+        end_time = note_end_time
+
+# Now turn that end time into the number of sample slots we need.
+num_samples = int(end_time * sample_rate)
+output = [0] * num_samples
+
+for frequency, start_time, duration, volume in notes:
+    render_note(output, start_time, duration, frequency, volume)</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="notes-placement" aria-label="Samples for notes placed by start time"></canvas>
+            <figcaption>The second note starts while the first note is still playing. The green output lane is the two notes added together.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="compose-staggered" data-visual="notes-placement" data-status="#noteCompositeStatus">Play Overlapping Notes</button>
+          </div>
+
+          <p id="noteCompositeStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <p>We can actually put the sample function in each note so that each note can use a different voice.</p>
+          <pre><code class="language-python">import math
+
+sample_rate = 44100
+
+def square(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    if phase < 0.5:
+        return volume
+    return -volume
+
+
+def sin(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    return math.sin(2 * math.pi * frequency * time) * volume
+
+
+def triangle(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    return (1 - 4 * abs(phase - 0.5)) * volume
+
+
+def pulse(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    if phase < 0.25:
+        return volume
+    return -volume
+
+
+def bright(sample_index, frequency, volume):
+    # A lead voice can be a mix of tiny waves.
+    main = sin(sample_index, frequency, volume)
+    sparkle = sin(sample_index, frequency * 2, volume * 0.35)
+    edge = square(sample_index, frequency * 3, volume * 0.18)
+    return main + sparkle + edge
+
+
+def render_note(output, voice, frequency, start_time, duration, volume):
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
+
+    for sample_index in range(num_samples):
+        output_index = start_index + sample_index
+
+        if output_index >= len(output):
+            break
+
+        output[output_index] += voice(sample_index, frequency, volume)
+
+
+notes = [
+    # voice, frequency, start time, duration, volume
+    (square,   392.00, 0.00, 0.42, 0.12),
+    (sin,      493.88, 0.12, 0.42, 0.12),
+    (triangle, 587.33, 0.24, 0.42, 0.12),
+    (pulse,    783.99, 0.36, 0.48, 0.10),
+    (bright,   987.77, 0.48, 0.58, 0.08),
+
+    (triangle, 329.63, 0.00, 1.10, 0.10),
+    (square,   392.00, 0.55, 0.55, 0.08),
+    (bright,   659.25, 0.95, 0.42, 0.08),
+    (pulse,    739.99, 1.10, 0.42, 0.08),
+    (sin,      587.33, 1.25, 0.55, 0.10),
+]
+
+# Same trick as before. The notes decide how big the output needs to be.
+end_time = 0
+
+for voice, frequency, start_time, duration, volume in notes:
+    note_end_time = start_time + duration
+
+    if note_end_time > end_time:
+        end_time = note_end_time
+
+num_samples = int(end_time * sample_rate)
+output = [0] * num_samples
+
+for voice, frequency, start_time, duration, volume in notes:
+    render_note(output, voice, frequency, start_time, duration, volume)</code></pre>
+          <figure class="sample-diagram tall-sample-diagram">
+            <canvas data-composition-visual="voice-notes" aria-label="Overlapping notes with different voice functions"></canvas>
+            <figcaption>Each lane is a different voice function. The output is all of those notes added together.</figcaption>
+          </figure>
+          <p>That already sounds pretty good and theres not that much code here. You also dont need a ton of voices to make something nice.</p>
+          <div class="code-actions">
+            <button data-play="layered-voices" data-visual="voice-notes">Play Different Voices</button>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <p>To make this a little nicer to use, make a lookup table of note letter number to frequency.</p>
+          <pre><code class="language-python">sample_rate = 44100
+
+note_frequency = {
+    "C4": 261.63,
+    "D4": 293.66,
+    "E4": 329.63,
+    "G4": 392.00,
+    "A4": 440.00,
+    "C5": 523.25,
+}
+
+def square(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    if phase < 0.5:
+        return volume
+    return -volume
+
+
+def render_note(output, voice, note_name, start_time, duration, volume):
+    frequency = note_frequency[note_name]
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
+
+    for sample_index in range(num_samples):
+        output_index = start_index + sample_index
+
+        if output_index >= len(output):
+            break
+
+        output[output_index] += voice(sample_index, frequency, volume)
+
+
+notes = [
+    # voice, note name, start time, duration, volume
+    (square, "C4", 0.00, 0.34, 0.18),
+    (square, "E4", 0.18, 0.34, 0.18),
+    (square, "G4", 0.36, 0.34, 0.18),
+    (square, "A4", 0.54, 0.34, 0.18),
+    (square, "C5", 0.72, 0.50, 0.18),
+]
+
+end_time = 0
+
+for voice, note_name, start_time, duration, volume in notes:
+    note_end_time = start_time + duration
+
+    if note_end_time > end_time:
+        end_time = note_end_time
+
+output = [0] * int(end_time * sample_rate)
+
+for voice, note_name, start_time, duration, volume in notes:
+    render_note(output, voice, note_name, start_time, duration, volume)</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="lookup-sequence" aria-label="Five semi-overlapping notes using note-name lookup"></canvas>
+            <figcaption>The code says <code>"C4"</code> and <code>"E4"</code> now. The lookup table turns those names into frequencies.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="lookup-sequence" data-visual="lookup-sequence">Play Lookup Sequence</button>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <p>We can actually just generate the lookup table so it supports more notes. Then we dont have to write out the frequency for every note on the piano.</p>
+          <pre><code class="language-python">note_names = [
+    "C", "C#", "D", "D#", "E", "F",
+    "F#", "G", "G#", "A", "A#", "B",
+]
+
+# build the note freq lut
+note_frequency = {}
+for midi_number in range(21, 109):
+    # MIDI note 69 is A4.
+    # A4 is the usual tuning anchor, 440 cycles per second.
+    semitones_from_a4 = midi_number - 69
+    frequency = 440 * (2 ** (semitones_from_a4 / 12))
+
+    note_name = note_names[midi_number % 12]
+    octave = (midi_number // 12) - 1
+    full_name = note_name + str(octave)
+
+    note_frequency[full_name] = frequency
+
+
+print(note_frequency["A4"])   # 440.0
+print(note_frequency["C4"])   # 261.625565...
+print(note_frequency["F#5"])  # 739.988845...</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <p>And now we can do something youll recognize.</p>
+          <pre><code class="language-python">sample_rate = 44100
+beat_seconds = 0.5
+
+note_names = [
+    "C", "C#", "D", "D#", "E", "F",
+    "F#", "G", "G#", "A", "A#", "B",
+]
+
+# build the note freq lut
+note_frequency = {}
+for midi_number in range(21, 109):
+    semitones_from_a4 = midi_number - 69
+    frequency = 440 * (2 ** (semitones_from_a4 / 12))
+
+    note_name = note_names[midi_number % 12]
+    octave = (midi_number // 12) - 1
+    full_name = note_name + str(octave)
+
+    note_frequency[full_name] = frequency
+
+# square and triangle are the same voice functions from above.
+def render_note(output, voice, frequency, start_time, duration, volume):
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
+
+    for sample_index in range(num_samples):
+        output_index = start_index + sample_index
+
+        if output_index >= len(output):
+            break
+
+        output[output_index] += voice(sample_index, frequency, volume)
+
+
+lead = [
+    # voice, note name, start beat, duration in beats, volume
+    (square, "D6", 0.0, 0.489583, 0.10),
+    (square, "C6", 0.5, 0.489583, 0.10),
+    (square, "B5", 1.0, 0.489583, 0.10),
+    (square, "A5", 1.5, 0.489583, 0.10),
+    (square, "G6", 2.0, 0.489583, 0.10),
+    (square, "E6", 2.5, 0.489583, 0.10),
+    (square, "F#6", 3.0, 0.489583, 0.10),
+    (square, "E6", 3.5, 0.489583, 0.10),
+    (square, "D6", 4.0, 1.48958, 0.10),
+    # ...
+]
+
+backing = [
+    (triangle, "G4", 0.0, 1.48958, 0.06),
+    (triangle, "E4", 1.5, 1.48958, 0.06),
+    (triangle, "F#4", 3.0, 0.989583, 0.06),
+    (triangle, "G4", 4.0, 1.48958, 0.06),
+    (triangle, "A4", 5.5, 1.48958, 0.06),
+    # ...
+]
+
+song_notes = lead + backing
+
+end_beat = 0
+
+for voice, note_name, start_beat, duration_beats, volume in song_notes:
+    note_end_beat = start_beat + duration_beats
+
+    if note_end_beat > end_beat:
+        end_beat = note_end_beat
+
+output = [0] * int(end_beat * beat_seconds * sample_rate)
+
+for voice, note_name, start_beat, duration_beats, volume in song_notes:
+    frequency = note_frequency[note_name]
+    start_time = start_beat * beat_seconds
+    duration = duration_beats * beat_seconds
+    render_note(output, voice, frequency, start_time, duration, volume)</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="town-song" aria-label="Pallet Town lead, backing, and mixed output"></canvas>
+            <figcaption>The orange lane is the lead voice. The blue lane is the backing voice. The green lane is the final sample list after both are added together.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="town-song" data-visual="town-song">Play Pallet Town</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="next-links">
+        <a href="index.html">Back to index</a>
+        <a href="04-noise.html">Next: Noise</a>
       </section>
     </main>
 

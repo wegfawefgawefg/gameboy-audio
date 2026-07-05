@@ -1,6 +1,6 @@
 const SAMPLE_RATE = 44100;
 const PREVIEW_SAMPLES = 160;
-const PLAY_SECONDS = 2.0;
+const AUDIO_OUTPUT_GAIN = 0.2;
 
 const frequencyInput = document.querySelector("#frequency");
 const volumeInput = document.querySelector("#volume");
@@ -9,27 +9,35 @@ const frequencyValue = document.querySelector("#frequencyValue");
 const volumeValue = document.querySelector("#volumeValue");
 const sampleValue = document.querySelector("#sampleValue");
 const playButton = document.querySelector("#playButton");
-const playStatus = document.querySelector("#playStatus");
 const playCodeButton = document.querySelector("#playCodeButton");
-const codePlayStatus = document.querySelector("#codePlayStatus");
-const speakerCanvas = document.querySelector("#speakerCanvas");
+const speakerMotion = document.querySelector("#speakerMotion");
+const diaphragmReadout = document.querySelector("#diaphragmReadout");
 const waveCanvas = document.querySelector("#waveCanvas");
+const languageCycleLabel = document.querySelector("#languageCycleLabel");
+const languageCycleButton = document.querySelector("#languageCycleButton");
+const playbackExamples = Array.from(document.querySelectorAll("[data-playback-example]"));
 
 sampleIndexInput.max = String(PREVIEW_SAMPLES - 1);
 
 let playingSource = null;
 let playingAudio = null;
 let playingAudioUrl = null;
+let liveAudioContext = null;
+let liveOscillator = null;
+let liveGain = null;
+let liveStartTime = 0;
 let animationFrame = null;
 let playFrequency = 0;
 let playVolume = 0;
 let playSampleCount = 0;
 let activePlayButton = null;
-let activePlayStatus = null;
+let languageCycleIndex = 0;
+let languageCycleTimer = null;
 
 function sampleAt(index, frequency, volume) {
   const time = index / SAMPLE_RATE;
-  const raw = Math.sin(2 * Math.PI * frequency * time);
+  const cyclePosition = (frequency * time) % 1;
+  const raw = cyclePosition < 0.5 ? 1 : -1;
 
   return {
     time,
@@ -47,92 +55,10 @@ function currentState() {
 }
 
 function drawSpeaker(sample) {
-  const { ctx, width, height } = prepareCanvas(speakerCanvas);
-  const compact = width < 520;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const travel = Math.min(width * 0.22, compact ? 80 : 130);
-  const coneX = centerX + sample.value * travel;
-  const backX = compact ? 70 : 120;
-  const coneHalfHeight = compact ? 42 : 64;
-  const coneTop = centerY - coneHalfHeight * 0.36;
-  const coneBottom = centerY + coneHalfHeight * 0.36;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = "#d8dde5";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(centerX, 58);
-  ctx.lineTo(centerX, height - 58);
-  ctx.stroke();
-
-  ctx.fillStyle = "#5c6470";
-  ctx.font = `${compact ? 12 : 16}px ui-monospace, SFMono-Regular, Consolas, monospace`;
-  ctx.fillText("rest position", centerX + 10, compact ? 62 : 70);
-
-  ctx.fillStyle = "#f7f8fb";
-  ctx.fillRect(backX - 18, centerY - coneHalfHeight - 16, 18, coneHalfHeight * 2 + 32);
-  ctx.strokeStyle = "#202124";
-  ctx.lineWidth = compact ? 4 : 6;
-  ctx.strokeRect(backX - 18, centerY - coneHalfHeight - 16, 18, coneHalfHeight * 2 + 32);
-
-  ctx.fillStyle = "#f7f8fb";
-  ctx.strokeStyle = "#202124";
-  ctx.lineWidth = compact ? 5 : 8;
-  ctx.beginPath();
-  ctx.moveTo(backX, centerY - coneHalfHeight);
-  ctx.lineTo(coneX, coneTop);
-  ctx.lineTo(coneX, coneBottom);
-  ctx.lineTo(backX, centerY + coneHalfHeight);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.strokeStyle = "#202124";
-  ctx.lineWidth = compact ? 5 : 7;
-  ctx.beginPath();
-  ctx.moveTo(coneX, coneTop - 8);
-  ctx.lineTo(coneX, coneBottom + 8);
-  ctx.stroke();
-
-  ctx.fillStyle = "#f97316";
-  ctx.beginPath();
-  ctx.arc(coneX, centerY, compact ? 14 : 18, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#f97316";
-  ctx.lineWidth = compact ? 3 : 4;
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY);
-  ctx.lineTo(coneX, centerY);
-  ctx.stroke();
-
-  drawArrowHead(ctx, coneX, centerY, coneX >= centerX ? 1 : -1);
-
-  ctx.fillStyle = "#202124";
-  ctx.font = `${compact ? 14 : 18}px ui-monospace, SFMono-Regular, Consolas, monospace`;
-  ctx.fillText(`speaker offset: ${sample.value.toFixed(3)}`, 24, 34);
-
-  ctx.fillStyle = "#5c6470";
-  ctx.font = `${compact ? 11 : 15}px ui-monospace, SFMono-Regular, Consolas, monospace`;
-  ctx.fillText("fixed speaker frame", Math.max(18, backX - 32), centerY + coneHalfHeight + 22);
-  ctx.fillText("moving cone edge", Math.min(width - 160, coneX + 14), coneTop - 14);
-  ctx.fillText("offset from rest", Math.min(width - 160, centerX + 12), centerY - 10);
-  ctx.fillText("negative", 24, height - 30);
-  ctx.fillText("positive", width - (compact ? 76 : 104), height - 30);
-}
-
-function drawArrowHead(ctx, x, y, direction) {
-  ctx.fillStyle = "#f97316";
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x - direction * 12, y - 7);
-  ctx.lineTo(x - direction * 12, y + 7);
-  ctx.closePath();
-  ctx.fill();
+  speakerMotion.style.setProperty("--sample-offset", sample.value.toFixed(4));
+  speakerMotion.classList.toggle("is-forward", sample.value > 0);
+  speakerMotion.classList.toggle("is-back", sample.value < 0);
+  diaphragmReadout.textContent = `diaphragm offset: ${sample.value.toFixed(3)}`;
 }
 
 function drawWave(frequency, volume, selectedIndex) {
@@ -155,7 +81,7 @@ function drawWave(frequency, volume, selectedIndex) {
 
   ctx.fillStyle = "#202124";
   ctx.font = `${compact ? 12 : 18}px ui-monospace, SFMono-Regular, Consolas, monospace`;
-  ctx.fillText(compact ? "playback scans across samples" : "the player scans left to right through these samples", 18, 28);
+  ctx.fillText(compact ? "playback scans across samples" : "samples tell the diaphragm where to move over time", 18, 28);
 
   ctx.fillStyle = "#5c6470";
   ctx.font = `${compact ? 11 : 14}px ui-monospace, SFMono-Regular, Consolas, monospace`;
@@ -201,7 +127,12 @@ function drawLine(ctx, frequency, volume, color, width, centerY, scaleY) {
     const y = centerY - sample.value * scaleY;
 
     if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    else {
+      const previousSample = sampleAt(i - 1, frequency, volume);
+      const previousY = centerY - previousSample.value * scaleY;
+      ctx.lineTo(x, previousY);
+      ctx.lineTo(x, y);
+    }
   }
 
   ctx.stroke();
@@ -271,14 +202,7 @@ async function playTone() {
   stopPlayback({ redraw: false });
 
   const { frequency, volume } = currentState();
-  await startSamplePlayback({
-    frequency,
-    volume,
-    seconds: PLAY_SECONDS,
-    button: playButton,
-    status: playStatus,
-    message: "Playing the same samples the cursor is scanning.",
-  });
+  await startLiveTone(frequency, volume);
 }
 
 async function playCodeExample() {
@@ -293,18 +217,57 @@ async function playCodeExample() {
     volume: 0.4,
     seconds: 1,
     button: playCodeButton,
-    status: codePlayStatus,
-    message: "Playing the one-second waveform from the code above.",
   });
 }
 
-async function startSamplePlayback({ frequency, volume, seconds, button, status, message }) {
-  activePlayButton = button;
-  activePlayStatus = status;
-  status.textContent = "Building samples...";
+async function startLiveTone(frequency, volume) {
+  activePlayButton = playButton;
 
   try {
-    const samples = buildSamples(frequency, volume, seconds);
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    liveAudioContext = new AudioContextClass();
+    liveOscillator = liveAudioContext.createOscillator();
+    liveGain = liveAudioContext.createGain();
+
+    liveOscillator.type = "square";
+    liveOscillator.frequency.value = frequency;
+    liveGain.gain.value = volume * AUDIO_OUTPUT_GAIN;
+    liveOscillator.connect(liveGain);
+    liveGain.connect(liveAudioContext.destination);
+
+    await liveAudioContext.resume();
+    liveStartTime = liveAudioContext.currentTime;
+    liveOscillator.start();
+
+    playingSource = liveOscillator;
+    playFrequency = frequency;
+    playVolume = volume;
+    playSampleCount = Infinity;
+    playButton.textContent = "Stop";
+    speakerMotion.classList.add("is-playing");
+    animatePlayback();
+  } catch (error) {
+    console.error("Could not start audio:", error);
+  }
+}
+
+function updateLiveTone() {
+  if (!liveAudioContext || !liveOscillator || !liveGain) return;
+
+  const { frequency, volume } = currentState();
+  const now = liveAudioContext.currentTime;
+
+  liveOscillator.frequency.setTargetAtTime(frequency, now, 0.01);
+  liveGain.gain.setTargetAtTime(volume * AUDIO_OUTPUT_GAIN, now, 0.01);
+  playFrequency = frequency;
+  playVolume = volume;
+}
+
+async function startSamplePlayback({ frequency, volume, seconds, button }) {
+  activePlayButton = button;
+
+  try {
+    const samples = buildSamples(frequency, volume * AUDIO_OUTPUT_GAIN, seconds);
     playingAudioUrl = samplesToWavUrl(samples);
     playingAudio = new Audio(playingAudioUrl);
     playingAudio.onended = stopPlayback;
@@ -315,23 +278,31 @@ async function startSamplePlayback({ frequency, volume, seconds, button, status,
     playVolume = volume;
     playSampleCount = samples.length;
     button.textContent = "Stop";
-    status.textContent = message;
+    speakerMotion.classList.add("is-playing");
     animatePlayback();
   } catch (error) {
-    status.textContent = `Could not start audio: ${error.message}`;
+    console.error("Could not start audio:", error);
   }
 }
 
 function animatePlayback() {
   if (!playingSource) return;
 
-  const elapsed = playingAudio ? playingAudio.currentTime : 0;
+  const elapsed = playingAudio
+    ? playingAudio.currentTime
+    : liveAudioContext.currentTime - liveStartTime;
   const absoluteSample = Math.floor(elapsed * SAMPLE_RATE);
   const previewIndex = absoluteSample % PREVIEW_SAMPLES;
 
-  if (absoluteSample >= playSampleCount) {
+  if (Number.isFinite(playSampleCount) && absoluteSample >= playSampleCount) {
     stopPlayback();
     return;
+  }
+
+  if (activePlayButton === playButton) {
+    const { frequency, volume } = currentState();
+    playFrequency = frequency;
+    playVolume = volume;
   }
 
   sampleIndexInput.value = String(previewIndex);
@@ -418,6 +389,14 @@ function stopPlayback(options = {}) {
     }
   }
 
+  if (liveAudioContext) {
+    liveAudioContext.close();
+    liveAudioContext = null;
+    liveOscillator = null;
+    liveGain = null;
+    liveStartTime = 0;
+  }
+
   if (playingAudioUrl) {
     URL.revokeObjectURL(playingAudioUrl);
     playingAudioUrl = null;
@@ -425,21 +404,68 @@ function stopPlayback(options = {}) {
 
   playButton.textContent = "Play Tone";
   playCodeButton.textContent = "Play This Code";
-  playStatus.textContent = "";
-  codePlayStatus.textContent = "";
+  speakerMotion.classList.remove("is-playing");
   activePlayButton = null;
-  activePlayStatus = null;
   if (redraw) render();
 }
 
 function handleControlInput() {
-  if (playingSource) stopPlayback();
+  if (playingSource && activePlayButton === playButton) updateLiveTone();
+  else if (playingSource) stopPlayback();
   render();
+}
+
+function updatePlaybackExample() {
+  if (playbackExamples.length === 0) return;
+
+  const activeExample = playbackExamples[languageCycleIndex % playbackExamples.length];
+
+  for (const example of playbackExamples) {
+    example.classList.toggle("is-visible", example === activeExample);
+  }
+
+  if (languageCycleLabel) languageCycleLabel.textContent = formatLanguageName(activeExample.dataset.playbackExample);
+}
+
+function formatLanguageName(name) {
+  const labels = {
+    cpp: "C++",
+    csharp: "C#",
+    javascript: "JavaScript",
+    typescript: "TypeScript",
+  };
+
+  return labels[name] || name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function startLanguageCycle() {
+  if (playbackExamples.length === 0 || languageCycleTimer) return;
+
+  languageCycleTimer = window.setInterval(() => {
+    languageCycleIndex = (languageCycleIndex + 1) % playbackExamples.length;
+    updatePlaybackExample();
+  }, 500);
+
+  if (languageCycleButton) languageCycleButton.textContent = "woah there motherfucker";
+}
+
+function stopLanguageCycle() {
+  if (!languageCycleTimer) return;
+
+  window.clearInterval(languageCycleTimer);
+  languageCycleTimer = null;
+  if (languageCycleButton) languageCycleButton.textContent = "spin me right round";
+}
+
+function toggleLanguageCycle() {
+  if (languageCycleTimer) stopLanguageCycle();
+  else startLanguageCycle();
 }
 
 frequencyInput.addEventListener("input", handleControlInput);
 volumeInput.addEventListener("input", handleControlInput);
 sampleIndexInput.addEventListener("input", handleControlInput);
+if (languageCycleButton) languageCycleButton.addEventListener("click", toggleLanguageCycle);
 playButton.addEventListener("click", () => {
   if (playingSource) stopPlayback();
   else playTone();
@@ -451,3 +477,5 @@ playCodeButton.addEventListener("click", () => {
 window.addEventListener("resize", render);
 
 render();
+updatePlaybackExample();
+startLanguageCycle();
