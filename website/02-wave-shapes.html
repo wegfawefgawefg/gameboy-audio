@@ -97,29 +97,40 @@
 
         <section class="chapter-panel">
           <h2>Adding A Voice Into The Output</h2>
-          <p>Usually we already have an output list. A voice function makes offsets, and <code>add</code> places those offsets into the list at a start time.</p>
-          <pre><code class="language-python">def add(samples, start_time, duration, sample_function, frequency, volume):
-    start_index = int(start_time * sample_rate)
+          <p>Keep two jobs separate: <code>render</code> makes one voice as its own sample list, then <code>add</code> places that rendered voice into the larger output at a start time.</p>
+          <pre><code class="language-python">def render(sample_function, frequency, volume, duration):
     num_samples = int(duration * sample_rate)
+    voice_samples = []
 
     for voice_index in range(num_samples):
+        sample = sample_function(voice_index, frequency, volume)
+        voice_samples.append(sample)
+
+    return voice_samples
+
+
+def add(output_samples, start_time, voice_samples):
+    start_index = int(start_time * sample_rate)
+
+    for voice_index, sample in enumerate(voice_samples):
         output_index = start_index + voice_index
 
-        if output_index >= len(samples):
+        if output_index >= len(output_samples):
             break
 
-        sample = sample_function(voice_index, frequency, volume)
-
-        # Add into the existing output.
+        # Add into the existing output list.
         # This lets multiple voices overlap.
-        samples[output_index] = samples[output_index] + sample
+        output_samples[output_index] = output_samples[output_index] + sample
 
-samples = []
+output = []
 for _ in range(int(2 * sample_rate)):
-    samples.append(0)
+    output.append(0)
 
-add(samples, 0.00, 0.50, square, 220, 0.25)
-add(samples, 0.50, 0.50, triangle, 330, 0.25)</code></pre>
+square_note = render(square, 220, 0.25, 0.50)
+triangle_note = render(triangle, 330, 0.25, 0.50)
+
+add(output, 0.00, square_note)
+add(output, 0.50, triangle_note)</code></pre>
         </section>
       </section>
     </main>
