@@ -96,8 +96,36 @@
         </section>
 
         <section class="chapter-panel">
-          <h2>Adding A Voice Into The Output</h2>
-          <p>Keep two jobs separate: <code>render</code> makes one voice as its own sample list, then <code>add</code> places that rendered voice into the larger output at a start time.</p>
+          <h2>Rendering One Voice</h2>
+          <p>A voice function can be passed around like any other value. Pick <code>square</code> or <code>triangle</code>, then render that one voice into its own sample list.</p>
+          <pre><code class="language-python">def render(sample_function, frequency, volume, duration):
+    num_samples = int(duration * sample_rate)
+    voice_samples = []
+
+    for voice_index in range(num_samples):
+        sample = sample_function(voice_index, frequency, volume)
+        voice_samples.append(sample)
+
+    return voice_samples
+
+
+square_note = render(square, 220, 0.25, 0.50)
+triangle_note = render(triangle, 330, 0.25, 0.50)</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Adding Waves Together</h2>
+          <p>If two sample lists happen at the same time, add their offsets together. The speaker gets one final offset per sample, but that final offset contains both waves.</p>
+          <pre><code class="language-python">first_voice = square_note[100]
+second_voice = triangle_note[100]
+
+mixed_sample = first_voice + second_voice</code></pre>
+          <p>That is the whole idea behind mixing. Render each sound separately, then sum the samples that land at the same time.</p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Compositing Sounds Into Output</h2>
+          <p><code>add</code> places a rendered voice into the larger output list. The start time chooses where the first rendered sample lands.</p>
           <pre><code class="language-python">def render(sample_function, frequency, volume, duration):
     num_samples = int(duration * sample_rate)
     voice_samples = []
@@ -130,7 +158,7 @@ square_note = render(square, 220, 0.25, 0.50)
 triangle_note = render(triangle, 330, 0.25, 0.50)
 
 add(output, 0.00, square_note)
-add(output, 0.50, triangle_note)</code></pre>
+add(output, 0.00, triangle_note)</code></pre>
         </section>
       </section>
     </main>
