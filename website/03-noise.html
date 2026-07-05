@@ -21,19 +21,20 @@
       <section class="intro">
         <div>
           <p class="eyebrow">Chapter 3</p>
-          <h1>Noise is a fast stream of not-quite-random offsets.</h1>
+          <h1>Noise is a stream of rough high/low offsets.</h1>
         </div>
-        <p>The Game Boy noise channel uses an LFSR. For a coder, think of it as a tiny bit machine that keeps producing high/low values.</p>
+        <p>For now, noise means the speaker keeps jumping between forward and backward offsets in a pattern that feels random.</p>
       </section>
 
       <section class="chapter">
         <section class="chapter-panel callout">
-          <h2>Why Noise Matters</h2>
-          <p>Short noise bursts become percussion: hi-hats, snares, clicks, explosions, wind, and texture. You do not need a drum sample. You need a noisy offset pattern and a volume shape.</p>
+          <h2>The Simple Idea</h2>
+          <p>A tone repeats a neat shape. Noise does not. It keeps choosing high or low offsets. If we fade that noisy motion out quickly, it starts to feel like a drum hit, hat, click, explosion, or texture.</p>
         </section>
 
         <section class="chapter-panel">
-          <h2>Spelled Out</h2>
+          <h2>Step 1: A Bit Machine</h2>
+          <p>We need a tiny machine that gives us a changing stream of bits. A bit is just <code>0</code> or <code>1</code>. Later we will turn <code>0</code> into one speaker offset and <code>1</code> into the other.</p>
           <pre><code class="language-python">sample_rate = 44100
 seconds = 1
 volume = 0.35
@@ -42,11 +43,81 @@ num_samples = seconds * sample_rate
 samples = []
 
 # LFSR means linear feedback shift register.
-# It is a small integer where bits are shifted each step.
+#
+# Do not worry about the name yet.
+# For now: it is an integer we keep mutating
+# so it produces a rough stream of 0/1 bits.
 lfsr = 0b111_1111_1111_1111
+</code></pre>
+        </section>
 
-# The noise does not change every audio sample.
-# It changes when this smaller clock ticks.
+        <section class="chapter-panel">
+          <h2>Step 2: Clock The Noise</h2>
+          <p>The noise value does not have to change every audio sample. We can change it at its own speed. A faster noise clock sounds brighter. A slower noise clock sounds rougher and lower.</p>
+          <pre><code class="language-python">noise_clock_hz = 5000
+# Change the noise bit 5,000 times per second.
+#
+# This is much slower than the sample rate:
+# 44,100 audio samples per second.
+#
+# So several audio samples may reuse the same noise value.
+
+timer = 0
+current_offset = 1
+
+for sample_index in range(num_samples):
+    # Every audio sample moves time forward by 1 / sample_rate.
+    timer = timer + 1 / sample_rate
+
+    if timer >= 1 / noise_clock_hz:
+        # The noise clock ticked.
+        # Time to choose a new high/low offset.
+        timer = timer - 1 / noise_clock_hz
+</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Step 3: Make The Next Bit</h2>
+          <p>This is the one weird line. It takes two bits from the current number, XORs them together, shifts the number, and feeds the new bit back into the top. That is enough to make a long not-obviously-repeating bit pattern.</p>
+          <pre><code class="language-python">        # Take two bits, xor them, and feed the result back in.
+        bit = (lfsr ^ (lfsr >> 1)) & 1
+        lfsr = (lfsr >> 1) | (bit << 14)
+
+        # Turn the low bit into a speaker offset.
+        #
+        # bit set   -> speaker backward
+        # bit clear -> speaker forward
+        if lfsr & 1:
+            current_offset = -1
+        else:
+            current_offset = 1
+</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Step 4: Shape It Like A Hit</h2>
+          <p>Constant noise is just a hiss. Percussion usually needs a volume shape. Here the noise starts loud and fades to zero over 0.45 seconds.</p>
+          <pre><code class="language-python">    # Fade out so it sounds like a tiny drum hit.
+    time = sample_index / sample_rate
+    fade = max(0, 1 - time / 0.45)
+
+    sample = current_offset * volume * fade
+    samples.append(sample)</code></pre>
+          <div class="code-actions">
+            <button data-play="noise" data-status="#noiseStatus">Play Noise</button>
+          </div>
+          <p id="noiseStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Flat Code</h2>
+          <pre><code class="language-python">sample_rate = 44100
+seconds = 1
+volume = 0.35
+num_samples = seconds * sample_rate
+
+samples = []
+lfsr = 0b111_1111_1111_1111
 noise_clock_hz = 5000
 timer = 0
 current_offset = 1
@@ -56,29 +127,18 @@ for sample_index in range(num_samples):
 
     if timer >= 1 / noise_clock_hz:
         timer = timer - 1 / noise_clock_hz
-
-        # Take two bits, xor them, and feed the result back in.
         bit = (lfsr ^ (lfsr >> 1)) & 1
         lfsr = (lfsr >> 1) | (bit << 14)
+        current_offset = -1 if lfsr & 1 else 1
 
-        if lfsr & 1:
-            current_offset = -1
-        else:
-            current_offset = 1
-
-    # Fade out so it sounds like a tiny drum hit.
     time = sample_index / sample_rate
     fade = max(0, 1 - time / 0.45)
     samples.append(current_offset * volume * fade)</code></pre>
-          <div class="code-actions">
-            <button data-play="noise" data-status="#noiseStatus">Play Noise</button>
-          </div>
-          <p id="noiseStatus" class="status-line" aria-live="polite"></p>
         </section>
 
         <section class="chapter-panel">
           <h2>Game Boy Connection</h2>
-          <p>Channel 4 is the noise channel. It does not play a normal pitch like the pulse channels. It clocks an LFSR and turns the bit stream into high/low speaker offsets. The clock settings change whether the noise sounds lower, higher, harder, or softer.</p>
+          <p>Channel 4 is the noise channel. It does not play a normal melody pitch like the pulse channels. It clocks an LFSR and turns the bit stream into high/low speaker offsets. The clock settings change whether the noise sounds lower, higher, harder, or softer.</p>
         </section>
       </section>
     </main>
