@@ -32,7 +32,7 @@
         <section class="chapter-panel">
           <h2>Square Wave</h2>
           <p>A square wave chooses between two offsets. The first half of the cycle is forward. The second half is backward.</p>
-          <pre><code class="language-python">def square_sample(sample_index, frequency, volume):
+          <pre><code class="language-python">def square(sample_index, frequency, volume):
     time = sample_index / sample_rate
     phase = (frequency * time) % 1
 
@@ -64,7 +64,7 @@
         <section class="chapter-panel">
           <h2>Triangle Wave</h2>
           <p>A triangle wave ramps up, then ramps down. It still repeats once per cycle, but it moves in straight lines instead of jumping.</p>
-          <pre><code class="language-python">def triangle_sample(sample_index, frequency, volume):
+          <pre><code class="language-python">def triangle(sample_index, frequency, volume):
     time = sample_index / sample_rate
     phase = (frequency * time) % 1
 
@@ -96,21 +96,30 @@
         </section>
 
         <section class="chapter-panel">
-          <h2>Selecting A Voice Shape</h2>
-          <p>The simplest selector is not an object. Just write a renderer that accepts the sample function to use.</p>
-          <pre><code class="language-python">def render_voice(sample_function, frequency, volume, seconds):
-    num_samples = int(seconds * sample_rate)
+          <h2>Adding A Voice Into The Output</h2>
+          <p>Usually we already have an output list. A voice function makes offsets, and <code>add</code> places those offsets into the list at a start time.</p>
+          <pre><code class="language-python">def add(samples, start_time, duration, sample_function, frequency, volume):
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
 
-    samples = []
+    for voice_index in range(num_samples):
+        output_index = start_index + voice_index
 
-    for sample_index in range(num_samples):
-        sample = sample_function(sample_index, frequency, volume)
-        samples.append(sample)
+        if output_index >= len(samples):
+            break
 
-    return samples
+        sample = sample_function(voice_index, frequency, volume)
 
-square_voice = render_voice(square_sample, 220, 0.35, 1)
-triangle_voice = render_voice(triangle_sample, 220, 0.35, 1)</code></pre>
+        # Add into the existing output.
+        # This lets multiple voices overlap.
+        samples[output_index] = samples[output_index] + sample
+
+samples = []
+for _ in range(int(2 * sample_rate)):
+    samples.append(0)
+
+add(samples, 0.00, 0.50, square, 220, 0.25)
+add(samples, 0.50, 0.50, triangle, 330, 0.25)</code></pre>
         </section>
       </section>
     </main>
