@@ -9,6 +9,15 @@
   </head>
   <body>
     <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-noise.html">3. Noise</a>
+        <a href="04-two-voices.html">4. Two Voices</a>
+        <a href="05-wavetable.html">5. Wavetable</a>
+        <a href="06-gameboy-interface.html">6. GB Interface</a>
+      </nav>
+
       <section class="intro">
         <div>
           <p class="eyebrow">Game Boy audio, built from first principles</p>
@@ -171,27 +180,35 @@ for sample_index in range(num_samples):
       </section>
 
       <section class="roadmap">
-        <h2>Where This Is Going</h2>
+        <h2>Chapters</h2>
         <div class="steps">
           <article>
-            <span>CH1</span>
-            <h3>Pulse + Sweep</h3>
-            <p>Square-ish speaker offsets, four duty settings, optional pitch bend.</p>
+            <a href="02-wave-shapes.html">
+              <span>Next</span>
+              <h3>Wave Shapes</h3>
+              <p>Square waves, triangle waves, and why shape changes sound.</p>
+            </a>
           </article>
           <article>
-            <span>CH2</span>
-            <h3>Pulse</h3>
-            <p>Another pulse voice, useful for melody, harmony, and arps.</p>
+            <a href="03-noise.html">
+              <span>CH4</span>
+              <h3>Noise</h3>
+              <p>LFSR noise for drums, hats, clicks, and texture.</p>
+            </a>
           </article>
           <article>
-            <span>CH3</span>
-            <h3>Wave Table</h3>
-            <p>A loop of 32 tiny 4-bit samples.</p>
+            <a href="04-two-voices.html">
+              <span>CH1 + CH2</span>
+              <h3>Two Voices</h3>
+              <p>Mix two pulse voices and see what two channels can do.</p>
+            </a>
           </article>
           <article>
-            <span>CH4</span>
-            <h3>Noise</h3>
-            <p>Pseudo-random offsets from an LFSR, used for percussion and texture.</p>
+            <a href="05-wavetable.html">
+              <span>CH3</span>
+              <h3>Wavetable</h3>
+              <p>The third tonal channel loops a tiny custom wave table.</p>
+            </a>
           </article>
         </div>
       </section>

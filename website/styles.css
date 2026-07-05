@@ -228,6 +228,11 @@ pre[class*="language-"] {
   padding: 16px;
 }
 
+.roadmap a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .roadmap span {
   display: inline-block;
   margin-bottom: 14px;
@@ -245,9 +250,91 @@ pre[class*="language-"] {
   margin-bottom: 0;
 }
 
+.chapter-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.chapter-nav a {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.chapter {
+  display: grid;
+  gap: 18px;
+}
+
+.chapter-panel,
+.concept-list article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+}
+
+.chapter-panel p,
+.concept-list p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.concept-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.concept-list h3 {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+.callout {
+  border-left: 4px solid var(--green);
+  padding-left: 14px;
+}
+
+.code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.code-actions button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 14px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.status-line {
+  min-height: 1.2rem;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 860px) {
   .intro,
   .lesson-grid,
+  .concept-list,
   .steps {
     grid-template-columns: 1fr;
   }

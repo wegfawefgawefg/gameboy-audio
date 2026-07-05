@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two Voices - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-noise.html">3. Noise</a>
+        <a href="04-two-voices.html">4. Two Voices</a>
+        <a href="05-wavetable.html">5. Wavetable</a>
+        <a href="06-gameboy-interface.html">6. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 4</p>
+          <h1>Two voices means two offset lists added together.</h1>
+        </div>
+        <p>The Game Boy has two pulse channels. They can play the same kind of sound at different pitches, volumes, and duty cycles.</p>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">sample_rate = 44100
+seconds = 1
+num_samples = seconds * sample_rate
+
+mixed_samples = []
+
+for sample_index in range(num_samples):
+    time = sample_index / sample_rate
+
+    phase_a = (220 * time) % 1
+    phase_b = (330 * time) % 1
+
+    # Voice A: 50% duty pulse.
+    if phase_a < 0.5:
+        voice_a = 1
+    else:
+        voice_a = -1
+
+    # Voice B: 25% duty pulse.
+    # The high part is shorter, so it sounds thinner.
+    if phase_b < 0.25:
+        voice_b = 1
+    else:
+        voice_b = -1
+
+    # Mix by adding offsets.
+    # Use smaller volumes so the sum does not get too large.
+    mixed = voice_a * 0.22 + voice_b * 0.18
+    mixed_samples.append(mixed)</code></pre>
+          <div class="code-actions">
+            <button data-play="two-voices" data-status="#twoVoiceStatus">Play Two Voices</button>
+          </div>
+          <p id="twoVoiceStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>What Can You Do With Two Pulse Voices?</h2>
+          <div class="concept-list">
+            <article>
+              <h3>Melody + Harmony</h3>
+              <p>One channel plays the tune while the other plays a supporting note.</p>
+            </article>
+            <article>
+              <h3>Arpeggios</h3>
+              <p>Switch notes quickly and the ear hears a chord-like pattern.</p>
+            </article>
+            <article>
+              <h3>Thicker Lead</h3>
+              <p>Put both channels near each other in pitch to make a bigger sound.</p>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

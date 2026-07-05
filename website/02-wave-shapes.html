@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wave Shapes - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-noise.html">3. Noise</a>
+        <a href="04-two-voices.html">4. Two Voices</a>
+        <a href="05-wavetable.html">5. Wavetable</a>
+        <a href="06-gameboy-interface.html">6. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 2</p>
+          <h1>Different sounds are different offset patterns.</h1>
+        </div>
+        <p>A sine wave moves smoothly. A square wave snaps between two offsets. A triangle wave moves in straight ramps. Same sample list idea, different math.</p>
+      </section>
+
+      <section class="chapter">
+        <div class="concept-list">
+          <article>
+            <h3>Sine</h3>
+            <p>Smooth motion. Useful as the cleanest possible starter tone, but not a Game Boy pulse channel sound.</p>
+          </article>
+          <article>
+            <h3>Square</h3>
+            <p>Only two offsets: high and low. This is the important one for Game Boy pulse channels.</p>
+          </article>
+          <article>
+            <h3>Triangle</h3>
+            <p>Moves in straight lines. The Game Boy does not have a triangle channel, but it is useful for understanding wave shapes.</p>
+          </article>
+        </div>
+
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">sample_rate = 44100
+frequency = 220
+volume = 0.35
+seconds = 1
+num_samples = seconds * sample_rate
+
+square_samples = []
+triangle_samples = []
+
+for sample_index in range(num_samples):
+    time = sample_index / sample_rate
+
+    # phase is where we are inside one cycle.
+    #
+    # phase = 0.00 means the cycle just started.
+    # phase = 0.50 means halfway through the cycle.
+    # phase wraps back to 0.00 after it reaches 1.00.
+    phase = (frequency * time) % 1
+
+    # Square wave:
+    # first half of the cycle is forward,
+    # second half is backward.
+    if phase < 0.5:
+        square = 1
+    else:
+        square = -1
+
+    # Triangle wave:
+    # this makes a ramp up, then a ramp down.
+    triangle = 1 - 4 * abs(phase - 0.5)
+
+    square_samples.append(square * volume)
+    triangle_samples.append(triangle * volume)</code></pre>
+          <div class="code-actions">
+            <button data-play="square" data-status="#waveStatus">Play Square</button>
+            <button data-play="triangle" data-status="#waveStatus">Play Triangle</button>
+          </div>
+          <p id="waveStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Flat Code</h2>
+          <pre><code class="language-python">sample_rate = 44100
+frequency = 220
+volume = 0.35
+seconds = 1
+num_samples = seconds * sample_rate
+samples = []
+
+for sample_index in range(num_samples):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    sample = 1 if phase < 0.5 else -1
+    samples.append(sample * volume)</code></pre>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

@@ -37,6 +37,15 @@ No external dependencies are needed.
 
 The static tutorial site lives in `website/`.
 
+Current site chapters:
+
+1. Samples and speaker offsets
+2. Wave shapes
+3. Noise
+4. Two pulse voices
+5. Wavetable / CH3
+6. Game Boy-style channel interface
+
 For local development with live reload:
 
 ```bash

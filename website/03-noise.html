@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Noise - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-noise.html">3. Noise</a>
+        <a href="04-two-voices.html">4. Two Voices</a>
+        <a href="05-wavetable.html">5. Wavetable</a>
+        <a href="06-gameboy-interface.html">6. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 3</p>
+          <h1>Noise is a fast stream of not-quite-random offsets.</h1>
+        </div>
+        <p>The Game Boy noise channel uses an LFSR. For a coder, think of it as a tiny bit machine that keeps producing high/low values.</p>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel callout">
+          <h2>Why Noise Matters</h2>
+          <p>Short noise bursts become percussion: hi-hats, snares, clicks, explosions, wind, and texture. You do not need a drum sample. You need a noisy offset pattern and a volume shape.</p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">sample_rate = 44100
+seconds = 1
+volume = 0.35
+num_samples = seconds * sample_rate
+
+samples = []
+
+# LFSR means linear feedback shift register.
+# It is a small integer where bits are shifted each step.
+lfsr = 0b111_1111_1111_1111
+
+# The noise does not change every audio sample.
+# It changes when this smaller clock ticks.
+noise_clock_hz = 5000
+timer = 0
+current_offset = 1
+
+for sample_index in range(num_samples):
+    timer = timer + 1 / sample_rate
+
+    if timer >= 1 / noise_clock_hz:
+        timer = timer - 1 / noise_clock_hz
+
+        # Take two bits, xor them, and feed the result back in.
+        bit = (lfsr ^ (lfsr >> 1)) & 1
+        lfsr = (lfsr >> 1) | (bit << 14)
+
+        if lfsr & 1:
+            current_offset = -1
+        else:
+            current_offset = 1
+
+    # Fade out so it sounds like a tiny drum hit.
+    time = sample_index / sample_rate
+    fade = max(0, 1 - time / 0.45)
+    samples.append(current_offset * volume * fade)</code></pre>
+          <div class="code-actions">
+            <button data-play="noise" data-status="#noiseStatus">Play Noise</button>
+          </div>
+          <p id="noiseStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Game Boy Connection</h2>
+          <p>Channel 4 is the noise channel. It does not play a normal pitch like the pulse channels. It clocks an LFSR and turns the bit stream into high/low speaker offsets. The clock settings change whether the noise sounds lower, higher, harder, or softer.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wavetable - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-noise.html">3. Noise</a>
+        <a href="04-two-voices.html">4. Two Voices</a>
+        <a href="05-wavetable.html">5. Wavetable</a>
+        <a href="06-gameboy-interface.html">6. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 5</p>
+          <h1>The third tonal channel is a tiny custom waveform.</h1>
+        </div>
+        <p>Channel 3 is the wave channel. It repeatedly plays a small table of values. On hardware, that table is 32 samples, and each sample is only 4 bits.</p>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel callout">
+          <h2>What Is A Wavetable?</h2>
+          <p>A wavetable is a small list of offsets that loops. Instead of calculating sine or square from a formula, you draw one cycle once, store it in a table, and read around the table over and over.</p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">sample_rate = 44100
+frequency = 110
+volume = 0.35
+seconds = 1
+num_samples = seconds * sample_rate
+
+# This is one cycle of a tiny triangle-ish wave.
+# The real Game Boy wave channel stores 32 4-bit samples.
+wave_table = [
+    -1.00, -0.75, -0.50, -0.25,
+     0.00,  0.25,  0.50,  0.75,
+     1.00,  0.75,  0.50,  0.25,
+     0.00, -0.25, -0.50, -0.75,
+]
+
+samples = []
+
+for sample_index in range(num_samples):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+
+    # Convert phase into a table index.
+    table_index = int(phase * len(wave_table))
+
+    sample = wave_table[table_index]
+    samples.append(sample * volume)</code></pre>
+          <div class="code-actions">
+            <button data-play="wavetable" data-status="#waveTableStatus" data-frequency="110">Play Wavetable</button>
+          </div>
+          <p id="waveTableStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Game Boy Connection</h2>
+          <p>CH3 is not another pulse channel. It is a small programmable wave. Games can use it for basses, smoother tones, fake instruments, or rough sample-like effects. It is limited, but that limit is exactly why it is interesting.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>
