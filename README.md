@@ -1,6 +1,8 @@
-# Game Boy audio sketch
+# Game Boy audio sketches
 
-This repo is a small Python sketch for understanding the Game Boy audio chip before turning it into an interactive web tutorial.
+**Status: unfinished / work in progress.** This is an early teaching prototype, not a complete Game Boy APU emulator and not yet a finished tutorial site.
+
+This repo is a set of small Python sketches for understanding the Game Boy audio chip before turning it into an interactive web tutorial.
 
 The original Game Boy APU has four sound channels:
 
@@ -11,18 +13,49 @@ The original Game Boy APU has four sound channels:
 
 So it is not exactly "three voices and a noise one." It is two pulse voices, one tiny wavetable voice, and one noise voice.
 
-## Run
+## Run the lessons
 
 ```bash
-python main.py
+python3 lessons/01_sample_loop.py
+python3 lessons/02_pulse_duty.py
+python3 lessons/03_wave_channel.py
+python3 lessons/04_noise_lfsr.py
+python3 lessons/05_tiny_player.py
 ```
 
-This writes:
+Each lesson writes a WAV file into `out/`. Lesson one also writes an SVG waveform picture. Later lessons may also write a short CSV plot slice for tutorial drafting.
 
-- `out/gameboy_demo.wav`: a tiny mixed demo
-- `out/first_40ms.csv`: the first 40 ms of samples for plotting
+To run the composed demo:
+
+```bash
+PYTHONPATH=src python3 -m gameboy_audio.main
+```
 
 No external dependencies are needed.
+
+## Website
+
+The static tutorial site lives in `website/`.
+
+For local development with live reload:
+
+```bash
+npx live-server website --host=127.0.0.1 --port=8080 --watch=website --no-browser
+```
+
+For GitHub Pages, publish the `website/` folder.
+
+## Teaching order
+
+The right way to teach this is not to throw the whole player at the reader first. The useful build-up is:
+
+1. `01_sample_loop.py`: a WAV is just a list of numbers over time.
+2. `02_pulse_duty.py`: a pulse channel is a phase counter plus an 8-step duty pattern.
+3. `03_wave_channel.py`: channel 3 loops through 32 tiny 4-bit samples.
+4. `04_noise_lfsr.py`: channel 4 clocks an LFSR to make pseudo-random bits.
+5. `05_tiny_player.py`: our software arranges these sounds over time.
+
+The last point matters: **the Game Boy APU did not use note events.** The hardware exposes registers. A game or music driver writes new register values over time. The Python "player" uses scheduling only because we are generating a WAV offline.
 
 ## The useful mental model
 
@@ -34,7 +67,7 @@ Every audio channel is a simple oscillator:
 - Envelopes change volume over time.
 - Sweep changes pitch over time.
 
-The real hardware is register-driven and has exact timers. This sketch is intentionally less exact so the important ideas stay visible.
+The real hardware is register-driven and has exact timers. These sketches are intentionally less exact so the important ideas stay visible.
 
 ## Pulse frequency formula
 

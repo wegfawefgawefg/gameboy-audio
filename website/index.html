@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Game Boy Audio From Samples</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Game Boy audio, built from first principles</p>
+          <h1>We are going to explain how the Game Boy makes sound, then write code that does the same kind of thing.</h1>
+        </div>
+        <p>
+          We will ignore transistor-level electronics unless they help the mental model.
+          The first model is simple: a sample is one desired speaker offset from center.
+        </p>
+      </section>
+
+      <section class="lesson-grid">
+        <div class="controls" aria-label="Audio controls">
+          <h2>1. Samples Move The Speaker</h2>
+          <p>
+            The graph is a list of samples. Playback scans across the dots.
+            The speaker uses the same current dot as its offset from center.
+          </p>
+
+          <label>
+            Frequency
+            <input id="frequency" type="range" min="80" max="880" value="220" step="1" />
+            <output id="frequencyValue">220 Hz</output>
+          </label>
+
+          <label>
+            Volume
+            <input id="volume" type="range" min="0" max="1" value="0.4" step="0.01" />
+            <output id="volumeValue">0.40</output>
+          </label>
+
+          <label>
+            Sample
+            <input id="sampleIndex" type="range" min="0" max="99" value="13" step="1" />
+            <output id="sampleValue">sample 13</output>
+          </label>
+
+          <button id="playButton" type="button">Play Tone</button>
+          <p id="playStatus" class="play-status" aria-live="polite"></p>
+        </div>
+
+        <div class="visuals">
+          <canvas id="speakerCanvas" width="760" height="300" aria-label="Speaker offset visualization"></canvas>
+          <canvas id="waveCanvas" width="760" height="360" aria-label="Sample waveform visualization"></canvas>
+        </div>
+      </section>
+
+      <section class="code-section">
+        <h2>The Code Idea</h2>
+        <p>
+          We are building a waveform: a list of offsets known as samples.
+          Each sample is one desired speaker offset at one specific time.
+        </p>
+
+        <div class="code-stack">
+          <article>
+            <h3>Spelled Out</h3>
+            <pre><code class="language-python">from math import pi, sin
+
+sample_rate = 44100
+# The number of speaker offsets we make in one second.
+#
+# 44,100 is common because CD audio used it.
+# More samples per second gives higher time resolution.
+# Fewer samples per second gives lower time resolution.
+#
+# If the rate is too low, high frequencies cannot be represented.
+# If the rate is too high, we waste memory and processing.
+
+frequency = 220
+# How many back-and-forth cycles happen per second.
+#
+# frequency = 1 means one cycle per second.
+# frequency = 10 means ten cycles per second.
+# frequency = 220 means 220 cycles per second.
+
+volume = 0.4
+# Magnitude scaler.
+#
+# volume = 0.4 makes every offset 40% as large.
+# volume = 1.0 leaves offsets unchanged.
+# volume = 2.0 makes every offset twice as large.
+
+seconds = 1
+# How many seconds worth of samples do we need?
+
+num_samples = seconds * sample_rate
+# How many total offsets do we need?
+#
+# 1 second worth of samples:
+# 1 * 44,100 = 44,100 samples.
+#
+# 10 seconds worth of samples:
+# 10 * 44,100 = 441,000 samples.
+#
+# 60 seconds worth of samples:
+# 60 * 44,100 = 2,646,000 samples.
+
+samples = []
+# samples will become our waveform:
+# a list of speaker offsets.
+
+for sample_index in range(num_samples):
+    # Which moment in time is this sample for?
+    #
+    # sample_index = 0 is time 0.0 seconds.
+    # sample_index = 22050 is time 0.5 seconds,
+    # halfway through the first second.
+    # sample_index = 44100 is time 1.0 seconds.
+    time = sample_index / sample_rate
+
+    # Make one raw offset for that moment.
+    #
+    # frequency * time tells us how many cycles have passed.
+    #
+    # If frequency = 220 and time = 0.5,
+    # then 110 cycles have passed.
+    #
+    # sin() wants an angle, not a cycle count.
+    # One full cycle around a circle is 2 * pi radians.
+    # So 2 * pi * frequency * time converts cycles into an angle.
+    sample = sin(2 * pi * frequency * time)
+
+    # Scale the offset magnitude.
+    # With volume = 0.4:
+    # +1.0 becomes +0.4. -1.0 becomes -0.4.
+    sample = sample * volume
+
+    # Store this offset in the waveform list.
+    samples.append(sample)</code></pre>
+          </article>
+
+          <article>
+            <h3>Flat Code</h3>
+            <pre><code class="language-python">from math import pi, sin
+
+sample_rate = 44100
+frequency = 220
+volume = 0.4
+seconds = 1
+num_samples = seconds * sample_rate
+samples = []
+
+for sample_index in range(num_samples):
+    time = sample_index / sample_rate
+    sample = sin(2 * pi * frequency * time)
+    sample = sample * volume
+    samples.append(sample)</code></pre>
+          </article>
+        </div>
+
+        <button id="playCodeButton" class="inline-play" type="button">Play This Code</button>
+        <p id="codePlayStatus" class="play-status" aria-live="polite"></p>
+
+        <p>
+          Multiplying by volume scales the offset. A volume below <code>1.0</code>
+          makes the movement smaller. A volume above <code>1.0</code> makes it larger.
+          Same shape, different speaker movement size.
+        </p>
+      </section>
+
+      <section class="roadmap">
+        <h2>Where This Is Going</h2>
+        <div class="steps">
+          <article>
+            <span>CH1</span>
+            <h3>Pulse + Sweep</h3>
+            <p>Square-ish speaker offsets, four duty settings, optional pitch bend.</p>
+          </article>
+          <article>
+            <span>CH2</span>
+            <h3>Pulse</h3>
+            <p>Another pulse voice, useful for melody, harmony, and arps.</p>
+          </article>
+          <article>
+            <span>CH3</span>
+            <h3>Wave Table</h3>
+            <p>A loop of 32 tiny 4-bit samples.</p>
+          </article>
+          <article>
+            <span>CH4</span>
+            <h3>Noise</h3>
+            <p>Pseudo-random offsets from an LFSR, used for percussion and texture.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
