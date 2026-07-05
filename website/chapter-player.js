@@ -85,6 +85,113 @@ function buildTwoVoices() {
   return samples;
 }
 
+function noteFrequency(note) {
+  const notes = {
+    C4: 261.63,
+    D4: 293.66,
+    E4: 329.63,
+    F4: 349.23,
+    G4: 392.00,
+    A4: 440.00,
+    B4: 493.88,
+    C5: 523.25,
+    E5: 659.25,
+  };
+  return notes[note];
+}
+
+function buildSequence() {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * 1.6);
+  const samples = new Float32Array(sampleCount);
+  const notes = [
+    ["C4", 0.00, 0.20],
+    ["E4", 0.22, 0.20],
+    ["G4", 0.44, 0.20],
+    ["C5", 0.66, 0.30],
+  ];
+
+  for (const [note, start, duration] of notes) {
+    addPulseNote(samples, noteFrequency(note), start, duration, 0.22, 0.5);
+  }
+
+  return samples;
+}
+
+function buildTwoSequences() {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * 1.6);
+  const samples = new Float32Array(sampleCount);
+  const melody = [
+    ["C5", 0.00, 0.18],
+    ["B4", 0.20, 0.18],
+    ["G4", 0.40, 0.18],
+    ["E4", 0.60, 0.28],
+  ];
+  const bass = [
+    ["C4", 0.00, 0.38],
+    ["G4", 0.40, 0.38],
+  ];
+
+  for (const [note, start, duration] of melody) {
+    addPulseNote(samples, noteFrequency(note), start, duration, 0.18, 0.5);
+  }
+  for (const [note, start, duration] of bass) {
+    addPulseNote(samples, noteFrequency(note), start, duration, 0.16, 0.25);
+  }
+
+  return samples;
+}
+
+function buildComposition() {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * 1.8);
+  const samples = new Float32Array(sampleCount);
+  const melody = [
+    ["C5", 0.00, 0.16],
+    ["E5", 0.20, 0.16],
+    ["G4", 0.40, 0.16],
+    ["C5", 0.60, 0.28],
+  ];
+  const bass = [
+    ["C4", 0.00, 0.38],
+    ["G4", 0.40, 0.38],
+    ["C4", 0.80, 0.38],
+  ];
+
+  for (const [note, start, duration] of melody) {
+    addPulseNote(samples, noteFrequency(note), start, duration, 0.17, 0.5);
+  }
+  for (const [note, start, duration] of bass) {
+    addPulseNote(samples, noteFrequency(note), start, duration, 0.14, 0.25);
+  }
+  addNoiseHit(samples, 0.00, 0.08, 0.26);
+  addNoiseHit(samples, 0.40, 0.08, 0.22);
+  addNoiseHit(samples, 0.80, 0.08, 0.26);
+
+  return samples;
+}
+
+function addPulseNote(samples, frequency, startSeconds, durationSeconds, volume, duty) {
+  const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
+  const length = Math.floor(durationSeconds * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < length; i += 1) {
+    const sampleIndex = start + i;
+    if (sampleIndex >= samples.length) break;
+    const fade = Math.min(1, i / 200, (length - i) / 600);
+    samples[sampleIndex] += squareSample(i, frequency, volume, duty) * fade;
+  }
+}
+
+function addNoiseHit(samples, startSeconds, durationSeconds, volume) {
+  const hit = lfsrNoise(durationSeconds, volume);
+  const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < hit.length; i += 1) {
+    const sampleIndex = start + i;
+    if (sampleIndex >= samples.length) break;
+    samples[sampleIndex] += hit[i];
+  }
+}
+
 function playSamples(samples, button, status) {
   stopChapterAudio();
   status.textContent = "Building WAV from samples...";
@@ -168,6 +275,9 @@ document.querySelectorAll("[data-play]").forEach((button) => {
     const kind = button.dataset.play;
     if (kind === "noise") playSamples(lfsrNoise(0.8, 0.35), button, status);
     else if (kind === "two-voices") playSamples(buildTwoVoices(), button, status);
+    else if (kind === "sequence") playSamples(buildSequence(), button, status);
+    else if (kind === "two-sequences") playSamples(buildTwoSequences(), button, status);
+    else if (kind === "composition") playSamples(buildComposition(), button, status);
     else playSamples(buildTone({ type: kind, frequency: Number(button.dataset.frequency || 220) }), button, status);
   });
 });

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Composition - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-note-sequences.html">3. Notes</a>
+        <a href="04-two-sequences.html">4. Two Sequences</a>
+        <a href="05-noise.html">5. Noise</a>
+        <a href="06-composition.html">6. Composition</a>
+        <a href="07-wavetable.html">7. Wavetable</a>
+        <a href="08-gameboy-interface.html">8. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 6</p>
+          <h1>A tiny composition is voices plus noise hits.</h1>
+        </div>
+        <p>Now we can combine the pieces: one pulse melody, one pulse bass/harmony line, and short noise bursts for percussion.</p>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">samples = [0] * int(1.8 * sample_rate)
+
+melody = [
+    (523.25, 0.00, 0.16),  # C5
+    (659.25, 0.20, 0.16),  # E5
+    (392.00, 0.40, 0.16),  # G4
+    (523.25, 0.60, 0.28),  # C5
+]
+
+bass = [
+    (261.63, 0.00, 0.38),  # C4
+    (392.00, 0.40, 0.38),  # G4
+    (261.63, 0.80, 0.38),  # C4
+]
+
+for frequency, start, duration in melody:
+    add_pulse_note(samples, frequency, start, duration, volume=0.17, duty=0.5)
+
+for frequency, start, duration in bass:
+    add_pulse_note(samples, frequency, start, duration, volume=0.14, duty=0.25)
+
+for start in [0.00, 0.40, 0.80]:
+    add_noise_hit(samples, start, duration=0.08, volume=0.25)</code></pre>
+          <div class="code-actions">
+            <button data-play="composition" data-status="#compositionStatus">Play Composition</button>
+          </div>
+          <p id="compositionStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>What Changed?</h2>
+          <p>Nothing magic. We are still filling one output list with offsets. The difference is that multiple little generators add into the same list: melody, bass, and noise hits.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

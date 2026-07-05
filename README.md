@@ -41,10 +41,12 @@ Current site chapters:
 
 1. Samples and speaker offsets
 2. Wave shapes
-3. Noise
-4. Two pulse voices
-5. Wavetable / CH3
-6. Game Boy-style channel interface
+3. Note sequences
+4. Two pulse sequences
+5. Noise
+6. Composition
+7. Wavetable / CH3
+8. Game Boy-style channel interface
 
 For local development with live reload:
 

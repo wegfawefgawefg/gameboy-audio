@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Note Sequences - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="chapter-nav">
+        <a href="index.html">1. Samples</a>
+        <a href="02-wave-shapes.html">2. Wave Shapes</a>
+        <a href="03-note-sequences.html">3. Notes</a>
+        <a href="04-two-sequences.html">4. Two Sequences</a>
+        <a href="05-noise.html">5. Noise</a>
+        <a href="06-composition.html">6. Composition</a>
+        <a href="07-wavetable.html">7. Wavetable</a>
+        <a href="08-gameboy-interface.html">8. GB Interface</a>
+      </nav>
+
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Chapter 3</p>
+          <h1>A melody is one voice changing notes over time.</h1>
+        </div>
+        <p>Instead of one frequency forever, we render a note for a duration, then render the next note after it.</p>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <h2>Spelled Out</h2>
+          <pre><code class="language-python">sample_rate = 44100
+
+def square_sample(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+    if phase < 0.5:
+        return volume
+    return -volume
+
+notes = [
+    # frequency, start time, duration
+    (261.63, 0.00, 0.20),  # C4
+    (329.63, 0.22, 0.20),  # E4
+    (392.00, 0.44, 0.20),  # G4
+    (523.25, 0.66, 0.30),  # C5
+]
+
+seconds = 1.2
+samples = [0] * int(seconds * sample_rate)
+
+for frequency, start_time, duration in notes:
+    start = int(start_time * sample_rate)
+    length = int(duration * sample_rate)
+
+    for i in range(length):
+        output_index = start + i
+        if output_index >= len(samples):
+            break
+
+        samples[output_index] = square_sample(i, frequency, 0.25)</code></pre>
+          <div class="code-actions">
+            <button data-play="sequence" data-status="#sequenceStatus">Play Sequence</button>
+          </div>
+          <p id="sequenceStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>The New Idea</h2>
+          <p>The waveform list is still just offsets. The new trick is placement. A note has a start time and a duration, so we write its samples into one region of the bigger output list.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>
