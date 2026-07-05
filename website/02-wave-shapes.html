@@ -144,6 +144,25 @@ for sample in square_note:
 
 for sample in triangle_note:
     output.append(sample)</code></pre>
+          <figure class="mix-diagram">
+            <svg viewBox="0 0 720 190" role="img" aria-label="One note followed by another note">
+              <text x="34" y="38">square_note</text>
+              <rect class="clip square-clip" x="170" y="18" width="210" height="34" />
+              <text x="34" y="88">triangle_note</text>
+              <rect class="clip triangle-clip" x="380" y="68" width="210" height="34" />
+              <text x="34" y="148">output</text>
+              <rect class="clip square-clip" x="170" y="128" width="210" height="34" />
+              <rect class="clip triangle-clip" x="380" y="128" width="210" height="34" />
+              <line class="timeline" x1="170" y1="174" x2="590" y2="174" />
+              <text x="168" y="188">0.0s</text>
+              <text x="374" y="188">0.5s</text>
+              <text x="580" y="188">1.0s</text>
+            </svg>
+            <figcaption>The second list starts after the first list ends.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="compose-sequence" data-status="#compositionStatus">Play One After Another</button>
+          </div>
 
           <h3>At The Same Time</h3>
           <p>If you want both notes at the same time, add the samples that happen at the same index. The speaker only gets one final offset, but that offset contains both waves.</p>
@@ -155,6 +174,25 @@ for sample_index in range(len(square_note)):
 
     mixed_sample = first_voice + second_voice
     output.append(mixed_sample)</code></pre>
+          <figure class="mix-diagram">
+            <svg viewBox="0 0 720 190" role="img" aria-label="Two notes added at the same time">
+              <text x="34" y="38">square_note</text>
+              <rect class="clip square-clip" x="170" y="18" width="320" height="34" />
+              <text x="34" y="88">triangle_note</text>
+              <rect class="clip triangle-clip" x="170" y="68" width="320" height="34" />
+              <text x="34" y="148">output</text>
+              <rect class="clip mixed-clip" x="170" y="128" width="320" height="34" />
+              <line class="stack-line" x1="330" y1="52" x2="330" y2="128" />
+              <text x="344" y="98">same sample indexes are added</text>
+              <line class="timeline" x1="170" y1="174" x2="490" y2="174" />
+              <text x="168" y="188">0.0s</text>
+              <text x="480" y="188">0.8s</text>
+            </svg>
+            <figcaption>Both lists start at the same time, so every output sample is a sum.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="compose-overlap" data-status="#compositionStatus">Play Same Time</button>
+          </div>
 
           <h3>Staggered By Time</h3>
           <p>If you want a note to start later, convert that start time into a start index. Then add the rendered samples beginning there.</p>
@@ -180,6 +218,29 @@ triangle_note = render(triangle, 330, 0.25, 0.50)
 
 add(output, 0.00, square_note)
 add(output, 0.50, triangle_note)</code></pre>
+          <figure class="mix-diagram">
+            <svg viewBox="0 0 720 210" role="img" aria-label="One note starts first and another starts later">
+              <text x="34" y="38">square_note</text>
+              <rect class="clip square-clip" x="170" y="18" width="270" height="34" />
+              <text x="34" y="88">triangle_note</text>
+              <rect class="clip triangle-clip" x="320" y="68" width="270" height="34" />
+              <text x="34" y="148">output</text>
+              <rect class="clip square-clip" x="170" y="128" width="150" height="34" />
+              <rect class="clip mixed-clip" x="320" y="128" width="120" height="34" />
+              <rect class="clip triangle-clip" x="440" y="128" width="150" height="34" />
+              <line class="stack-line" x1="320" y1="104" x2="320" y2="166" />
+              <text x="334" y="119">triangle starts later</text>
+              <line class="timeline" x1="170" y1="184" x2="590" y2="184" />
+              <text x="168" y="198">0.0s</text>
+              <text x="314" y="198">0.5s</text>
+              <text x="580" y="198">end</text>
+            </svg>
+            <figcaption>The overlap area is added. Before and after it, only one note is playing.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="compose-staggered" data-status="#compositionStatus">Play Staggered</button>
+          </div>
+          <p id="compositionStatus" class="status-line" aria-live="polite"></p>
         </section>
       </section>
     </main>

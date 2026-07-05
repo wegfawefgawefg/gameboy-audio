@@ -381,6 +381,59 @@ pre[class*="language-"] {
   stroke: var(--blue);
 }
 
+.mix-diagram {
+  margin: 14px 0;
+}
+
+.mix-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.mix-diagram figcaption {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.mix-diagram text {
+  fill: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+}
+
+.mix-diagram .clip {
+  stroke: #202124;
+  stroke-width: 2;
+}
+
+.mix-diagram .square-clip {
+  fill: #ffedd5;
+}
+
+.mix-diagram .triangle-clip {
+  fill: #dbeafe;
+}
+
+.mix-diagram .mixed-clip {
+  fill: #dcfce7;
+}
+
+.mix-diagram .timeline {
+  stroke: #b9c0cc;
+  stroke-width: 2;
+}
+
+.mix-diagram .stack-line {
+  stroke: var(--green);
+  stroke-dasharray: 6 6;
+  stroke-width: 2;
+}
+
 @media (max-width: 860px) {
   .intro,
   .lesson-grid,

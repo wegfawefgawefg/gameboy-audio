@@ -70,6 +70,63 @@ function buildTone({ seconds = 1, frequency = 220, volume = 0.35, type = "sine" 
   return samples;
 }
 
+function renderVoice(sampleFunction, seconds, frequency, volume) {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
+  const samples = new Float32Array(sampleCount);
+
+  for (let i = 0; i < samples.length; i += 1) {
+    const fade = Math.min(1, i / 400, (samples.length - i) / 400);
+    samples[i] = sampleFunction(i, frequency, volume) * fade;
+  }
+
+  return samples;
+}
+
+function buildCompositingSequence() {
+  const squareNote = renderVoice(squareSample, 0.5, 220, 0.28);
+  const triangleNote = renderVoice(triangleSample, 0.5, 330, 0.28);
+  const samples = new Float32Array(squareNote.length + triangleNote.length);
+
+  for (let i = 0; i < squareNote.length; i += 1) {
+    samples[i] = squareNote[i];
+  }
+  for (let i = 0; i < triangleNote.length; i += 1) {
+    samples[squareNote.length + i] = triangleNote[i];
+  }
+
+  return samples;
+}
+
+function buildCompositingOverlap() {
+  const squareNote = renderVoice(squareSample, 0.8, 220, 0.22);
+  const triangleNote = renderVoice(triangleSample, 0.8, 330, 0.22);
+  const samples = new Float32Array(squareNote.length);
+
+  for (let i = 0; i < samples.length; i += 1) {
+    samples[i] = squareNote[i] + triangleNote[i];
+  }
+
+  return samples;
+}
+
+function buildCompositingStaggered() {
+  const squareNote = renderVoice(squareSample, 0.65, 220, 0.22);
+  const triangleNote = renderVoice(triangleSample, 0.65, 330, 0.22);
+  const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * 1.25));
+  const triangleStart = Math.floor(0.35 * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < squareNote.length; i += 1) {
+    samples[i] += squareNote[i];
+  }
+  for (let i = 0; i < triangleNote.length; i += 1) {
+    const sampleIndex = triangleStart + i;
+    if (sampleIndex >= samples.length) break;
+    samples[sampleIndex] += triangleNote[i];
+  }
+
+  return samples;
+}
+
 function buildTwoVoices() {
   const seconds = 1.2;
   const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
@@ -274,6 +331,9 @@ document.querySelectorAll("[data-play]").forEach((button) => {
 
     const kind = button.dataset.play;
     if (kind === "noise") playSamples(lfsrNoise(0.8, 0.35), button, status);
+    else if (kind === "compose-sequence") playSamples(buildCompositingSequence(), button, status);
+    else if (kind === "compose-overlap") playSamples(buildCompositingOverlap(), button, status);
+    else if (kind === "compose-staggered") playSamples(buildCompositingStaggered(), button, status);
     else if (kind === "two-voices") playSamples(buildTwoVoices(), button, status);
     else if (kind === "sequence") playSamples(buildSequence(), button, status);
     else if (kind === "two-sequences") playSamples(buildTwoSequences(), button, status);
