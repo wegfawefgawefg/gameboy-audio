@@ -331,6 +331,56 @@ pre[class*="language-"] {
   font-size: 0.9rem;
 }
 
+.wave-diagram {
+  margin: 14px 0;
+}
+
+.wave-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.wave-diagram figcaption {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.wave-diagram text {
+  fill: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+}
+
+.wave-diagram .axis {
+  stroke: #b9c0cc;
+  stroke-width: 2;
+}
+
+.wave-diagram .guide {
+  stroke: #d8dde5;
+  stroke-dasharray: 6 6;
+  stroke-width: 2;
+}
+
+.wave-diagram .wave {
+  fill: none;
+  stroke-width: 6;
+  stroke-linejoin: round;
+}
+
+.wave-diagram .square {
+  stroke: var(--orange);
+}
+
+.wave-diagram .triangle {
+  stroke: var(--blue);
+}
+
 @media (max-width: 860px) {
   .intro,
   .lesson-grid,
