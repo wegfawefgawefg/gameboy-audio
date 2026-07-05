@@ -98,7 +98,25 @@
         <section class="chapter-panel">
           <h2>Rendering One Voice</h2>
           <p>A voice function can be passed around like any other value. Pick <code>square</code> or <code>triangle</code>, then render that one voice into its own sample list.</p>
-          <pre><code class="language-python">def render(sample_function, frequency, volume, duration):
+          <pre><code class="language-python">def square(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+
+    if phase < 0.5:
+        return volume
+    else:
+        return -volume
+
+
+def triangle(sample_index, frequency, volume):
+    time = sample_index / sample_rate
+    phase = (frequency * time) % 1
+
+    raw = 1 - 4 * abs(phase - 0.5)
+    return raw * volume
+
+
+def render(sample_function, frequency, volume, duration):
     num_samples = int(duration * sample_rate)
     voice_samples = []
 
@@ -114,30 +132,33 @@ triangle_note = render(triangle, 330, 0.25, 0.50)</code></pre>
         </section>
 
         <section class="chapter-panel">
-          <h2>Adding Waves Together</h2>
-          <p>If two sample lists happen at the same time, add their offsets together. The speaker gets one final offset per sample, but that final offset contains both waves.</p>
-          <pre><code class="language-python">first_voice = square_note[100]
-second_voice = triangle_note[100]
+          <h2>Compositing Sound Waves</h2>
+          <p>After rendering, each sound is just a list of speaker offsets. Compositing means deciding how those lists should become one final output list.</p>
 
-mixed_sample = first_voice + second_voice</code></pre>
-          <p>That is the whole idea behind mixing. Render each sound separately, then sum the samples that land at the same time.</p>
-        </section>
+          <h3>One After Another</h3>
+          <p>If you want one note after the other, put the second list after the first list.</p>
+          <pre><code class="language-python">output = []
 
-        <section class="chapter-panel">
-          <h2>Compositing Sounds Into Output</h2>
-          <p><code>add</code> places a rendered voice into the larger output list. The start time chooses where the first rendered sample lands.</p>
-          <pre><code class="language-python">def render(sample_function, frequency, volume, duration):
-    num_samples = int(duration * sample_rate)
-    voice_samples = []
+for sample in square_note:
+    output.append(sample)
 
-    for voice_index in range(num_samples):
-        sample = sample_function(voice_index, frequency, volume)
-        voice_samples.append(sample)
+for sample in triangle_note:
+    output.append(sample)</code></pre>
 
-    return voice_samples
+          <h3>At The Same Time</h3>
+          <p>If you want both notes at the same time, add the samples that happen at the same index. The speaker only gets one final offset, but that offset contains both waves.</p>
+          <pre><code class="language-python">output = []
 
+for sample_index in range(len(square_note)):
+    first_voice = square_note[sample_index]
+    second_voice = triangle_note[sample_index]
 
-def add(output_samples, start_time, voice_samples):
+    mixed_sample = first_voice + second_voice
+    output.append(mixed_sample)</code></pre>
+
+          <h3>Staggered By Time</h3>
+          <p>If you want a note to start later, convert that start time into a start index. Then add the rendered samples beginning there.</p>
+          <pre><code class="language-python">def add(output_samples, start_time, voice_samples):
     start_index = int(start_time * sample_rate)
 
     for voice_index, sample in enumerate(voice_samples):
@@ -158,7 +179,7 @@ square_note = render(square, 220, 0.25, 0.50)
 triangle_note = render(triangle, 330, 0.25, 0.50)
 
 add(output, 0.00, square_note)
-add(output, 0.00, triangle_note)</code></pre>
+add(output, 0.50, triangle_note)</code></pre>
         </section>
       </section>
     </main>
