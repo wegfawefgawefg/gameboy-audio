@@ -49,7 +49,12 @@ notes = [
 ]
 
 seconds = 1.2
-samples = [0] * int(seconds * sample_rate)
+num_samples = int(seconds * sample_rate)
+
+samples = []
+for _ in range(num_samples):
+    samples.append(0)
+# Start with silence: one zero offset for every sample slot.
 
 for frequency, start_time, duration in notes:
     start = int(start_time * sample_rate)

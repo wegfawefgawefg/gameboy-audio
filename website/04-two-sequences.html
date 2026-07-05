@@ -31,7 +31,12 @@
       <section class="chapter">
         <section class="chapter-panel">
           <h2>Spelled Out</h2>
-          <pre><code class="language-python">samples = [0] * int(1.6 * sample_rate)
+          <pre><code class="language-python">num_samples = int(1.6 * sample_rate)
+
+samples = []
+for _ in range(num_samples):
+    samples.append(0)
+# Start with silence: one zero offset for every sample slot.
 
 melody = [
     (523.25, 0.00, 0.18),  # C5
