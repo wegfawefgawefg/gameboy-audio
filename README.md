@@ -43,7 +43,7 @@ For local development with live reload:
 npx live-server website --host=127.0.0.1 --port=8080 --watch=website --no-browser
 ```
 
-For GitHub Pages, publish the `website/` folder.
+GitHub Pages is configured through `.github/workflows/pages.yml`; pushes to `main` deploy the `website/` folder.
 
 ## Teaching order
 
