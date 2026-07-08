@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bonus: Sampling Real Sounds And The Wavetable - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <a class="site-title" href="index.html">How to code GameBoy music.</a>
+      <section class="intro intro-title-only">
+        <div>
+          <h1>Bonus: Sampling real sounds, and the wavetable</h1>
+        </div>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <h2>Why Do We Even Want This?</h2>
+          <p>
+            We have two pulse voices and noise now. Thats enough to make something
+            gameboy-ish, but it is not the full machine.
+          </p>
+          <p>
+            The Game Boy has four normal sound channels. Pulse 1. Pulse 2. Wave. Noise.
+            So if the song wants a third pitched part, it cannot ask for another pulse
+            voice. There are only two. The third pitched part has to use the weird one:
+            the wave channel.
+          </p>
+          <div class="route-reference-images" aria-label="Route 3 visual reference">
+            <img src="assets/route-3-map.png" alt="Route 3 map from Pokemon Red and Blue">
+            <img src="assets/route-3-screenshot.jpg" alt="Pokemon Red and Blue Route 3 screenshot">
+          </div>
+          <p>
+            Route 3 is a nice example because you can hear the obvious square-ish flutes,
+            you can hear the fuzzy snare, and there is still another pitched line in the
+            stack. That extra line is channel 3. The annoying thing is that channel 3 is
+            not a pulse channel. Its a little 32-sample table.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>The Actual Four Channels</h2>
+          <p>
+            This is a slice of the real Route 3 music data. Four routines. Four channels.
+            Click the note and drum lines. The boring setting lines are commented so you
+            can see which ones are knobs and which ones are actual sound events.
+            <a href="https://github.com/pret/pokered/blob/master/audio/music/routes3.asm">Source</a>.
+          </p>
+          <div class="assembly-grid">
+            <article>
+              <h3>CH1 pulse</h3>
+              <pre class="route3-code assembly-code"><code>Music_Routes3_Ch1::
+    tempo 148        <span class="py-comment"># setting: song speed</span>
+    volume 7, 7      <span class="py-comment"># setting: left/right master volume</span>
+    duty_cycle 3     <span class="py-comment"># setting: pulse shape</span>
+    vibrato 6, 3, 4  <span class="py-comment"># setting: wiggle pitch a little</span>
+    note_type 12, 11, 5  <span class="py-comment"># setting: note length / volume envelope</span>
+    octave 3         <span class="py-comment"># setting: following notes live in octave 3</span>
+
+.mainloop:         <span class="py-comment"># label: loop starts here</span>
+    <span data-route3-event="route3-p1-0">note E_, 6</span>
+    <span data-route3-event="route3-p1-1">note D_, 1</span>
+    <span data-route3-event="route3-p1-2">note E_, 1</span>
+    <span data-route3-event="route3-p1-3">note C_, 4</span>
+    <span data-route3-event="route3-p1-4">note E_, 4</span>
+    <span data-route3-event="route3-p1-5">note C_, 6</span>
+    <span data-route3-event="route3-p1-6">note D_, 1</span>
+    <span data-route3-event="route3-p1-7">note E_, 1</span>
+    <span data-route3-event="route3-p1-8">note F_, 2</span>
+    <span data-route3-event="route3-p1-9">note G_, 2</span>
+    <span data-route3-event="route3-p1-10">note G_, 2</span>
+    <span data-route3-event="route3-p1-11">note A_, 2</span></code></pre>
+            </article>
+
+            <article>
+              <h3>CH2 pulse</h3>
+              <pre class="route3-code assembly-code"><code>Music_Routes3_Ch2::
+    vibrato 8, 2, 3  <span class="py-comment"># setting: another pitch wiggle</span>
+    duty_cycle 2     <span class="py-comment"># setting: different pulse shape</span>
+    note_type 12, 12, 7  <span class="py-comment"># setting: note length / envelope</span>
+    octave 4         <span class="py-comment"># setting: start higher than CH1</span>
+
+.mainloop:         <span class="py-comment"># label: loop starts here</span>
+    <span data-route3-event="route3-p2-0">note C_, 6</span>
+    octave 3         <span class="py-comment"># setting: following note drops down</span>
+    <span data-route3-event="route3-p2-1">note G_, 1</span>
+    octave 4         <span class="py-comment"># setting: back up again</span>
+    <span data-route3-event="route3-p2-2">note C_, 1</span>
+    <span data-route3-event="route3-p2-3">note E_, 10</span>
+    octave 3         <span class="py-comment"># setting: dip down</span>
+    <span data-route3-event="route3-p2-4">note G_, 2</span>
+    octave 4         <span class="py-comment"># setting: back up</span>
+    <span data-route3-event="route3-p2-5">note C_, 2</span>
+    <span data-route3-event="route3-p2-6">note G_, 2</span>
+    <span data-route3-event="route3-p2-7">note F_, 2</span>
+    <span data-route3-event="route3-p2-8">note E_, 2</span>
+    <span data-route3-event="route3-p2-9">note D_, 2</span>
+    <span data-route3-event="route3-p2-10">note C_, 2</span></code></pre>
+            </article>
+
+            <article class="wave-channel-card">
+              <h3>CH3 wave</h3>
+              <pre class="route3-code assembly-code"><code>Music_Routes3_Ch3::
+    vibrato 4, 1, 0  <span class="py-comment"># setting: tiny pitch wobble</span>
+    note_type 12, 1, 2  <span class="py-comment"># setting: quiet, bc CH3 is backing texture</span>
+    octave 4         <span class="py-comment"># setting: this is the extra pitched voice</span>
+
+.mainloop:         <span class="py-comment"># label: loop starts here</span>
+    <span data-route3-event="route3-w-0">note E_, 1</span>
+    rest 1           <span class="py-comment"># event: silence</span>
+    <span data-route3-event="route3-w-2">note G_, 4</span>
+    <span data-route3-event="route3-w-3">note E_, 1</span>
+    <span data-route3-event="route3-w-4">note E_, 1</span>
+    <span data-route3-event="route3-w-5">note E_, 1</span>
+    rest 1           <span class="py-comment"># event: silence</span>
+    <span data-route3-event="route3-w-6">note E_, 1</span>
+    rest 1           <span class="py-comment"># event: silence</span>
+    <span data-route3-event="route3-w-8">note G_, 4</span>
+    <span data-route3-event="route3-w-9">note E_, 1</span>
+    rest 1           <span class="py-comment"># event: silence</span>
+    <span data-route3-event="route3-w-11">note G_, 4</span></code></pre>
+            </article>
+
+            <article>
+              <h3>CH4 noise</h3>
+              <pre class="route3-code assembly-code"><code>Music_Routes3_Ch4::
+    drum_speed 6     <span class="py-comment"># setting: drum event speed</span>
+
+.mainloop:         <span class="py-comment"># label: loop starts here</span>
+    <span data-route3-event="route3-n-0-0">drum_note 17, 12</span>
+    <span data-route3-event="route3-n-0-1">drum_note 17, 2</span>
+    <span data-route3-event="route3-n-0-2">drum_note 18, 2</span>
+    <span data-route3-event="route3-n-0-3">drum_note 17, 4</span>
+    <span data-route3-event="route3-n-0-4">drum_note 17, 4</span>
+    <span data-route3-event="route3-n-0-5">drum_note 19, 1</span>
+    <span data-route3-event="route3-n-0-6">drum_note 19, 1</span>
+    <span data-route3-event="route3-n-0-7">drum_note 19, 1</span>
+    <span data-route3-event="route3-n-0-8">drum_note 19, 1</span>
+    <span data-route3-event="route3-n-0-9">drum_note 18, 1</span>
+    <span data-route3-event="route3-n-0-10">drum_note 18, 1</span></code></pre>
+            </article>
+          </div>
+          <p>
+            Thats the shape. CH1 and CH2 are the two pulse voices. CH4 is noise. CH3 is
+            the weird purple one. It gets its notes just like the others, but the sound
+            shape comes from a little table of numbers.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>This Is Not Raw Hardware Code</h2>
+          <p>
+            Important correction before we pretend we understand anything. This Route 3
+            file is not the CPU manually writing every Game Boy sound register by hand.
+            The Pokemon devs already built a little music language.
+          </p>
+          <p>
+            The song says friendly stuff like <code>note E_, 6</code>,
+            <code>vibrato 4, 1, 0</code>, <code>note_type 12, 1, 2</code>, and
+            <code>octave 4</code>. Then the audio engine reads those commands and turns
+            them into actual hardware state. So this assembly is already one abstraction
+            above the chip.
+          </p>
+          <pre><code class="language-text">song data
+    note_type 12, 1, 2
+    octave 4
+    note E_, 1
+
+music driver
+    remembers note speed
+    remembers current octave
+    applies vibrato
+    chooses CH3 wave instrument
+    calculates hardware frequency
+
+Game Boy APU registers
+    CH3 enable
+    CH3 volume level
+    CH3 frequency
+    CH3 wave RAM</code></pre>
+          <div class="setting-grid">
+            <article>
+              <h3><code>octave 4</code></h3>
+              <p>
+                Sets the current octave for following notes. After this, <code>note E_</code>
+                means E in octave 4 until another octave command changes it.
+              </p>
+            </article>
+            <article>
+              <h3><code>vibrato 4, 1, 0</code></h3>
+              <p>
+                Tells the driver to wiggle the pitch. Delay first, then extent/rate stuff.
+                You write one command; the driver keeps nudging frequency while notes play.
+              </p>
+            </article>
+            <article>
+              <h3><code>note_type 12, 1, 2</code></h3>
+              <p>
+                Sets note timing and channel settings. On pulse channels this mostly feels
+                like volume/envelope. On CH3, that last value is special: it picks the wave
+                instrument.
+              </p>
+            </article>
+          </div>
+          <p>
+            That last one matters for this chapter. In the Red/Blue audio engine, when the
+            current channel is CH3, the <code>fade</code> slot is reused as a wave
+            instrument number. The macro packs <code>volume</code> and <code>fade</code>
+            into one byte, and the engine stores that low nibble as
+            <code>wMusicWaveInstrument</code>. Route 3 uses <code>note_type 12, 1, 2</code>,
+            so the wave channel is using wave instrument <code>2</code>.
+            <a href="https://github.com/pret/pokered/blob/master/macros/scripts/audio.asm">Macro source</a>.
+            <a href="https://github.com/pret/pokered/blob/master/audio/engine_1.asm">Engine source</a>.
+          </p>
+          <pre><code class="language-nasm">; audio/engine_1.asm, simplified
+; if channel 3, store the packed byte's low nibble as wave instrument
+ld hl, wMusicWaveInstrument
+ld a, d
+and $f
+ld [hl], a</code></pre>
+          <p>
+            And that instrument number points at one of the predefined 32-nibble wave
+            shapes in <code>audio/wave_samples.asm</code>.
+            <a href="https://github.com/pret/pokered/blob/master/audio/wave_samples.asm">Wave source</a>.
+          </p>
+          <p>
+            Red/Blue does not have a giant library here. It has <code>wave0</code> through
+            <code>wave4</code>, then <code>wave5</code> for the spookier Lavender/Pokemon
+            Tower style stuff, and the remaining pointer slots just point back at
+            <code>wave5</code>. Each normal wave costs only 16 bytes, but this engine is
+            still very much "pick from a tiny instrument shelf", not "invent a new waveform
+            every note."
+          </p>
+          <pre><code class="language-nasm">; wave instrument 2
+; 32 tiny values, each 0..15
+.wave2
+    dn  1,  3,  6,  9, 11, 13, 14, 14
+    dn 14, 14, 15, 15, 15, 15, 14, 13
+    dn 13, 14, 15, 15, 15, 15, 14, 14
+    dn 14, 14, 13, 11,  9,  6,  3,  1</code></pre>
+          <p>
+            So yeah, CH3 is more different than just "another note list." The notes choose
+            pitch and timing. The <code>note_type</code> command quietly chooses which
+            32-value waveform that pitch is played through.
+          </p>
+          <p>
+            Also, this is why you do not see procedural noise in this file. Noise is not a
+            wavetable instrument in Pokemon Red/Blue. Noise is CH4. The song says
+            <code>drum_note 17</code> or <code>drum_note 19</code>, and the driver turns
+            that into noise-channel settings. The random-ish part comes from the Game Boy
+            noise hardware, not from a list of random wave RAM values.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>So What Is A Wavetable?</h2>
+          <p>
+            A wavetable is just a tiny waveform you store in a list. Instead of saying
+            "calculate a square wave with a formula", you say "here are 32 offsets, keep
+            reading them in a loop."
+          </p>
+          <pre><code class="language-python"># One cycle of a tiny wave.
+# These are still speaker offsets.
+wave_table = [
+    -1.00, -0.75, -0.50, -0.25,
+     0.00,  0.25,  0.50,  0.75,
+     1.00,  0.75,  0.50,  0.25,
+     0.00, -0.25, -0.50, -0.75,
+]
+
+# sample_index tells us which output sample we are filling.
+# frequency tells us how many times per second we should loop the table.
+def wavetable(sample_index, frequency, volume):
+    table_position = sample_index * frequency * len(wave_table) / sample_rate
+
+    table_index = int(table_position) % len(wave_table)
+    offset = wave_table[table_index]
+
+    return offset * volume</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="wavetable-cycle" aria-label="One cycle stored in a wavetable"></canvas>
+            <figcaption>The list stores one cycle. Each dot is one value in the little list.</figcaption>
+          </figure>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="wavetable-loop" aria-label="A wavetable being looped into a longer waveform"></canvas>
+            <figcaption>To make a tone, we scan through the same little list over and over.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="wavetable" data-visual="wavetable-loop" data-status="#wavetableLoopStatus" data-frequency="220">Play Wavetable</button>
+          </div>
+          <p id="wavetableLoopStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>The Index Is The Whole Trick</h2>
+          <p>
+            The line to stare at is the table position line. It answers one boring
+            question: after this many output samples, how far through the tiny table should
+            we be?
+          </p>
+          <pre><code class="language-python">table_position = sample_index * frequency * len(wave_table) / sample_rate
+table_index = int(table_position) % len(wave_table)
+
+# Example with 16 table values:
+#
+# table_position 0.0  -> table index 0
+# table_position 4.2  -> table index 4
+# table_position 8.9  -> table index 8
+# table_position 15.4 -> table index 15
+# table_position 16.0 -> table index 0 again
+# table_position 17.0 -> table index 1 again</code></pre>
+          <p>
+            The <code>% len(wave_table)</code> part is the loop. Fall off the end of the
+            table, wrap back to the front. Thats it.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Draw A Wave And Listen To It</h2>
+          <p>
+            This toy is the idea without the hardware baggage. Drag the bars. The bars are
+            the stored offsets. The purple line is what happens when we loop through those
+            offsets fast enough to make a tone.
+          </p>
+          <div class="wave-shape-toy wavetable-toy">
+            <div class="toy-badge" aria-hidden="true"><span>GAY BOY</span></div>
+            <div class="wave-shape-toy-body">
+              <canvas data-wavetable-toy aria-label="Editable wavetable bars and rendered output"></canvas>
+              <div class="wave-controls wavetable-controls" data-wavetable-controls>
+                <label>
+                  Frequency
+                  <output data-wavetable-output="frequency">220 Hz</output>
+                  <input type="range" min="60" max="880" step="1" value="220" data-wavetable-control="frequency" />
+                </label>
+                <label>
+                  Volume
+                  <output data-wavetable-output="volume">0.22</output>
+                  <input type="range" min="0.02" max="0.45" step="0.01" value="0.22" data-wavetable-control="volume" />
+                </label>
+              </div>
+              <div class="noise-preset-list wavetable-preset-list">
+                <button data-wavetable-preset="square">square-ish</button>
+                <button data-wavetable-preset="triangle">triangle-ish</button>
+                <button data-wavetable-preset="saw">saw-ish</button>
+                <button data-wavetable-preset="stair">stairs</button>
+                <button data-wavetable-preset="soft">soft mix</button>
+              </div>
+              <figure class="sample-diagram wavetable-toy-output">
+                <canvas data-composition-visual="wavetable-toy-rendered" aria-label="Rendered output from the editable wavetable"></canvas>
+              </figure>
+              <div class="code-actions">
+                <button data-play="wavetable-toy" data-visual="wavetable-toy-rendered">Play Current Table</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Now Make It More Game Boy-ish</h2>
+          <p>
+            The actual Game Boy wave channel stores 32 tiny values. Each value is only
+            four bits, so it can only be a number from <code>0</code> to <code>15</code>.
+            That is crude as hell, but it is enough to draw a shape. And the shape does
+            not have to be square. Thats the point.
+          </p>
+          <pre><code class="language-python">sample_rate = 44100
+
+# 32 tiny 4-bit values.
+# 15 means high offset. 0 means low offset.
+wave_ram = [
+    15, 15, 15, 15, 15, 15, 15, 15,
+     0,  0,  0,  0,  0,  0,  0,  0,
+    15, 15, 15, 15, 15, 15, 15, 15,
+     0,  0,  0,  0,  0,  0,  0,  0,
+]
+
+def wave_channel(sample_index, frequency, volume):
+    table_position = sample_index * frequency * 32 / sample_rate
+    table_index = int(table_position) % 32
+
+    four_bit_value = wave_ram[table_index]
+
+    # Convert 0..15 into roughly -1.0..1.0.
+    offset = (four_bit_value / 15) * 2 - 1
+
+    return offset * volume</code></pre>
+          <figure class="sample-diagram">
+            <canvas data-composition-visual="wavetable-pulse" aria-label="Game Boy wave channel pretending to be a pulse wave"></canvas>
+            <figcaption>This is channel 3 pretending to be a pulse wave. It is not a real pulse channel, but it can fake the vibe.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="wavetable" data-visual="wavetable-pulse" data-frequency="220">Play Pseudo Pulse Wavetable</button>
+          </div>
+          <p>
+            In Route 3 it is being used like a cheap third pulse-ish voice. That can feel
+            boring, but it is still useful because the Game Boy only has two real pulse
+            channels. The wave channel lets the song sneak in one more pitched part.
+          </p>
+          <p>
+            The more general reason you want this channel is that the table is yours. You
+            can draw a bass shape, a nasal lead, a fake pulse, a tiny organ-ish thing, or
+            some ugly little custom waveform. CH1 and CH2 give you four fixed pulse
+            shapes. CH3 says fine, draw your own 32-value trash rectangle.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Can We Race The Table?</h2>
+          <p>
+            Yeah. Sort of. The normal use is "load one table, loop it as a tone." But you
+            can also keep replacing the table while the song runs. Then the wave channel
+            starts acting less like a synth oscillator and more like terrible 4-bit sample
+            playback.
+          </p>
+          <p>
+            So lets use actual audio samples. Not fake math. First lets do the thing we
+            actually care about: listen to the original Pikachu sound from Yellow, then take our clean
+            <code>pikachu.wav</code> and crush it until it starts living in that same
+            neighborhood.
+          </p>
+          <p>
+            This is also the trick behind those tiny voice clips you hear in some Game Boy
+            games. The voice is not magic. Its a tiny voice sample shoved through a very
+            small, very crunchy audio path.
+          </p>
+          <p>
+            We tried the fancy wavetable version first and it sounded wrong. Too good.
+            Thats weird, so we looked at the Pokemon Yellow source. Turns out they did
+            not race the wavetable for Pikachu. They did something much nastier.
+          </p>
+          <p>
+            Yellow stores the Pikachu source clips as 22050 Hz, 8-bit, mono WAVs in the
+            disassembly, but the build tool packs them down to 1-bit PCM. Each sample is
+            only above center or below center. Eight samples fit in one byte. Thats a huge
+            space win when you have 42 Pikachu clips.
+            <a href="https://github.com/pret/pokeyellow/blob/master/tools/pcm.c">Converter source</a>.
+            <a href="https://github.com/pret/pokeyellow/blob/master/home/pikachu_cries.asm">Playback source</a>.
+          </p>
+          <p>
+            So yeah, they made it worse than it had to be. Not because they were stupid.
+            Because ROM space is real, and a recognizable crunchy Pikachu is better than
+            no voiced Pikachu.
+          </p>
+          <pre><code class="language-python"># Pokemon Yellow style, simplified from tools/pcm.c
+def convert_to_yellow_1bit(source_samples):
+    bits = []
+
+    for sample in source_samples:
+        if sample > 0:
+            bits.append(1)
+        else:
+            bits.append(0)
+
+    return bits
+
+
+# Simplified from PlayPikachuPCM.
+# The real code uses CH3, fills wave RAM with 0xff,
+# then toggles rAUD3LEVEL between mute and loud.
+def play_yellow_1bit(bits):
+    output = []
+
+    for bit in bits:
+        if bit == 1:
+            output.append(1.0)
+        else:
+            output.append(-1.0)
+
+    return output</code></pre>
+          <pre><code class="language-python">target = load_wav("original_pikachu_sound_from_yellow.wav")
+source = load_wav("pikachu.wav")
+
+# Yellow's converter wants 22050 Hz audio.
+source = resample(source, 22050)
+
+bits = convert_to_yellow_1bit(source)
+yellow_style = play_yellow_1bit(bits)
+
+play(yellow_style)</code></pre>
+          <div class="pikachu-study-grid">
+            <article>
+              <h3>The Original Pikachu Sound From Yellow</h3>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="pikachu-yellow-target" aria-label="Original Pikachu sound from Pokemon Yellow waveform"></canvas>
+                <figcaption>This is the sound we are trying to get close to.</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/pikachu-yellow-target.wav" data-visual="pikachu-yellow-target">Play Original Yellow Sound</button>
+            </article>
+            <article>
+              <h3>Our Source</h3>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="pikachu-user-crush" aria-label="Clean pikachu source and Yellow style 1-bit attempt"></canvas>
+                <figcaption><code>pikachu.wav</code> on top, Yellow-style 1-bit version underneath.</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/pikachu-user-source.wav" data-visual="pikachu-user-crush">Play Original</button>
+              <button data-play-file="assets/audio/wavetable/pikachu-user-yellow-1bit.wav" data-visual="pikachu-user-crush">Play Yellow-style 1-bit</button>
+            </article>
+          </div>
+          <p>
+            Thats the focused lesson: for Pikachu, the nasty sound is mostly the 1-bit
+            conversion and the volume-toggle playback routine. Now here is the separate
+            wavetable-racing idea we were playing with earlier. This is still a useful
+            Game Boy trick to understand, but it is not what Yellow uses for Pikachu.
+          </p>
+          <pre><code class="language-python">def four_bit(value):
+    # value starts as -1.0..1.0
+    # store it as 0..15 because thats all wave RAM can hold
+    return round((value + 1) * 7.5)
+
+
+def stream_samples_through_wave_ram(source_samples):
+    output = []
+    wave_ram = [8] * 32
+
+    for sample_index, source_sample in enumerate(source_samples):
+        # Every 32 output samples, race in a new wave table.
+        if sample_index % 32 == 0:
+            chunk = source_samples[sample_index : sample_index + 32]
+            wave_ram = []
+
+            for value in chunk:
+                wave_ram.append(four_bit(value))
+
+        four_bit_value = wave_ram[sample_index % 32]
+        offset = (four_bit_value / 15) * 2 - 1
+
+        output.append(offset)
+
+    return output</code></pre>
+          <div class="stream-grid">
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-fight" aria-label="Kenney fight voice raced through Wave RAM"></canvas>
+                <figcaption>Kenney fight voice: game-ready voice bark</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/fight-source.wav" data-visual="real-wave-stream-fight">Play Source Fight</button>
+              <button data-play-file="assets/audio/wavetable/fight-raced.wav" data-visual="real-wave-stream-fight">Play Raced Fight</button>
+              <button data-play-file="assets/audio/wavetable/fight-dmg.wav" data-visual="real-wave-stream-fight">Play DMG-ish Fight</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-scream" aria-label="Scream sample raced through Wave RAM"></canvas>
+                <figcaption>scream: already rough, gets properly cursed</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/scream-source.wav" data-visual="real-wave-stream-scream">Play Source Scream</button>
+              <button data-play-file="assets/audio/wavetable/scream-raced.wav" data-visual="real-wave-stream-scream">Play Raced Scream</button>
+              <button data-play-file="assets/audio/wavetable/scream-dmg.wav" data-visual="real-wave-stream-scream">Play DMG-ish Scream</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-roar" aria-label="Lion roar sample raced through Wave RAM"></canvas>
+                <figcaption>roar: big messy animal sound reduced to tiny table chunks</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/roar-source.wav" data-visual="real-wave-stream-roar">Play Source Roar</button>
+              <button data-play-file="assets/audio/wavetable/roar-raced.wav" data-visual="real-wave-stream-roar">Play Raced Roar</button>
+              <button data-play-file="assets/audio/wavetable/roar-dmg.wav" data-visual="real-wave-stream-roar">Play DMG-ish Roar</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-crash" aria-label="Car crash sample raced through Wave RAM"></canvas>
+                <figcaption>car crash: transient chaos is exactly the fun part</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/crash-source.wav" data-visual="real-wave-stream-crash">Play Source Crash</button>
+              <button data-play-file="assets/audio/wavetable/crash-raced.wav" data-visual="real-wave-stream-crash">Play Raced Crash</button>
+              <button data-play-file="assets/audio/wavetable/crash-dmg.wav" data-visual="real-wave-stream-crash">Play DMG-ish Crash</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-cat" aria-label="Cat sample raced through Wave RAM"></canvas>
+                <figcaption>cat: tiny animal sample, tiny awful speaker energy</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/cat-source.wav" data-visual="real-wave-stream-cat">Play Source Cat</button>
+              <button data-play-file="assets/audio/wavetable/cat-raced.wav" data-visual="real-wave-stream-cat">Play Raced Cat</button>
+              <button data-play-file="assets/audio/wavetable/cat-dmg.wav" data-visual="real-wave-stream-cat">Play DMG-ish Cat</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-laser" aria-label="Kenney laser sample raced through Wave RAM"></canvas>
+                <figcaption>Kenney laser: already synthetic, so it survives the abuse well</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/laser-source.wav" data-visual="real-wave-stream-laser">Play Source Laser</button>
+              <button data-play-file="assets/audio/wavetable/laser-raced.wav" data-visual="real-wave-stream-laser">Play Raced Laser</button>
+              <button data-play-file="assets/audio/wavetable/laser-dmg.wav" data-visual="real-wave-stream-laser">Play DMG-ish Laser</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-glass" aria-label="Kenney glass hit sample raced through Wave RAM"></canvas>
+                <figcaption>Kenney glass: short hit, easy to turn into item-break junk</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/glass-source.wav" data-visual="real-wave-stream-glass">Play Source Glass</button>
+              <button data-play-file="assets/audio/wavetable/glass-raced.wav" data-visual="real-wave-stream-glass">Play Raced Glass</button>
+              <button data-play-file="assets/audio/wavetable/glass-dmg.wav" data-visual="real-wave-stream-glass">Play DMG-ish Glass</button>
+            </article>
+            <article>
+              <figure class="sample-diagram">
+                <canvas data-composition-visual="real-wave-stream-step" aria-label="Kenney footstep sample raced through Wave RAM"></canvas>
+                <figcaption>Kenney footstep: little foley hit, good game-sound material</figcaption>
+              </figure>
+              <button data-play-file="assets/audio/wavetable/step-source.wav" data-visual="real-wave-stream-step">Play Source Step</button>
+              <button data-play-file="assets/audio/wavetable/step-raced.wav" data-visual="real-wave-stream-step">Play Raced Step</button>
+              <button data-play-file="assets/audio/wavetable/step-dmg.wav" data-visual="real-wave-stream-step">Play DMG-ish Step</button>
+            </article>
+          </div>
+          <p>
+            The fight voice, laser, glass, and footstep are from <a href="https://kenney.nl/assets/category%3AAudio">Kenney's CC0 audio packs</a>.
+            The scream and cat are from the CC0 <a href="https://archive.org/details/Sound_Effects_2">Sound Effects 2</a>
+            pack. The roar is from <a href="https://archive.org/details/SSE_Library_ANIMALS">SSE Library: ANIMALS</a>,
+            and the crash is from <a href="https://archive.org/details/SSE_Library_VEHICLES">SSE Library: VEHICLES</a>.
+            We trimmed everything short, converted it to mono, gated/denoised the quiet
+            junk, then ran the Wave RAM abuse pass above.
+          </p>
+          <p>
+            So the wavetable is not just "a third square wave, but worse." It is a tiny
+            programmable shape buffer. You can use it politely as a looping waveform, or
+            abuse it as garbage sample playback.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Rendering A Note With A Wavetable</h2>
+          <p>
+            This looks almost exactly like the sequence chapter. The only difference is
+            that the voice function reads from a table instead of calculating a square wave.
+          </p>
+          <pre><code class="language-python">sample_rate = 44100
+
+def wave_channel(sample_index, frequency, volume, wave_ram):
+    table_position = sample_index * frequency * len(wave_ram) / sample_rate
+    table_index = int(table_position) % len(wave_ram)
+
+    four_bit_value = wave_ram[table_index]
+    offset = (four_bit_value / 15) * 2 - 1
+
+    return offset * volume
+
+
+def render_note(output, note_name, start_time, duration, volume, wave_ram):
+    frequency = note_frequency[note_name]
+    start_index = int(start_time * sample_rate)
+    num_samples = int(duration * sample_rate)
+
+    for sample_index in range(num_samples):
+        output_index = start_index + sample_index
+
+        if output_index >= len(output):
+            break
+
+        output[output_index] += wave_channel(
+            sample_index,
+            frequency,
+            volume,
+            wave_ram,
+        )</code></pre>
+          <p>
+            Same old sample list. Same old <code>+=</code>. The voice just gets its shape
+            from a list now.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Route 3 With The Wave Channel Back In</h2>
+          <p>
+            Here is our sketchy Route 3 setup again, but now with four lanes: pulse 1,
+            pulse 2, wave, and noise. Click any tuple in the code to hear that little note
+            by itself. Hover the code or graph to see where it lands.
+          </p>
+          <div class="route3-workbench">
+            <pre class="route3-code"><code><span class="py-comment"># (note, start_step, length_steps)</span>
+<span class="py-name">pulse_voice_1</span> = [
+    <span data-route3-event="route3-p1-0">("E3", 0, 6)</span>, <span data-route3-event="route3-p1-1">("D3", 6, 1)</span>, <span data-route3-event="route3-p1-2">("E3", 7, 1)</span>, <span data-route3-event="route3-p1-3">("C3", 8, 4)</span>,
+    <span data-route3-event="route3-p1-4">("E3", 12, 4)</span>, <span data-route3-event="route3-p1-5">("C3", 16, 6)</span>, <span data-route3-event="route3-p1-6">("D3", 22, 1)</span>, <span data-route3-event="route3-p1-7">("E3", 23, 1)</span>,
+    <span data-route3-event="route3-p1-8">("F3", 24, 2)</span>, <span data-route3-event="route3-p1-9">("G3", 26, 2)</span>, <span data-route3-event="route3-p1-10">("G3", 28, 2)</span>, <span data-route3-event="route3-p1-11">("A3", 30, 2)</span>,
+]
+
+<span class="py-name">pulse_voice_2</span> = [
+    <span data-route3-event="route3-p2-0">("C4", 0, 6)</span>, <span data-route3-event="route3-p2-1">("G3", 6, 1)</span>, <span data-route3-event="route3-p2-2">("C4", 7, 1)</span>, <span data-route3-event="route3-p2-3">("E4", 8, 10)</span>,
+    <span data-route3-event="route3-p2-4">("G3", 18, 2)</span>, <span data-route3-event="route3-p2-5">("C4", 20, 2)</span>, <span data-route3-event="route3-p2-6">("G4", 22, 2)</span>, <span data-route3-event="route3-p2-7">("F4", 24, 2)</span>,
+    <span data-route3-event="route3-p2-8">("E4", 26, 2)</span>, <span data-route3-event="route3-p2-9">("D4", 28, 2)</span>, <span data-route3-event="route3-p2-10">("C4", 30, 2)</span>, <span data-route3-event="route3-p2-11">("D4", 32, 8)</span>,
+]
+
+<span class="py-comment"># same idea, but rendered through the wave table voice</span>
+<span class="py-name">wave_voice</span> = [
+    <span data-route3-event="route3-w-0">("E4", 0, 1)</span>, ("rest", 1, 1), <span data-route3-event="route3-w-2">("G4", 2, 4)</span>,
+    <span data-route3-event="route3-w-3">("E4", 6, 1)</span>, <span data-route3-event="route3-w-4">("E4", 7, 1)</span>, <span data-route3-event="route3-w-5">("E4", 8, 1)</span>, ("rest", 9, 1),
+    <span data-route3-event="route3-w-6">("E4", 10, 1)</span>, ("rest", 11, 1), <span data-route3-event="route3-w-8">("G4", 12, 4)</span>,
+    <span data-route3-event="route3-w-9">("E4", 16, 1)</span>, ("rest", 17, 1), <span data-route3-event="route3-w-11">("G4", 18, 4)</span>,
+]
+
+<span class="py-comment"># (start_step, hold_samples, length_steps)</span>
+<span class="py-name">noise_hits</span> = [
+    <span data-route3-event="route3-n-0-0">(0, 42, 12)</span>, <span data-route3-event="route3-n-0-1">(12, 42, 2)</span>, <span data-route3-event="route3-n-0-2">(14, 18, 2)</span>,
+    <span data-route3-event="route3-n-0-3">(16, 42, 4)</span>, <span data-route3-event="route3-n-0-4">(20, 42, 4)</span>,
+    <span data-route3-event="route3-n-0-5">(24, 8, 1)</span>, <span data-route3-event="route3-n-0-6">(25, 8, 1)</span>,
+]
+
+<span class="py-name">song</span> = []
+
+<span class="py-keyword">for</span> note, start, length <span class="py-keyword">in</span> pulse_voice_1:
+    add_pulse(song, note, start, length, duty=0.50)
+
+<span class="py-keyword">for</span> note, start, length <span class="py-keyword">in</span> pulse_voice_2:
+    add_pulse(song, note, start, length, duty=0.25)
+
+<span class="py-keyword">for</span> note, start, length <span class="py-keyword">in</span> wave_voice:
+    add_wave(song, note, start, length, wave_ram)
+
+<span class="py-keyword">for</span> start, hold, length <span class="py-keyword">in</span> noise_hits:
+    add_faded_noise(song, start, hold, length)</code></pre>
+            <figure class="sample-diagram route3-visual route3-channel-visual">
+              <canvas data-composition-visual="route3-full-channels" aria-label="Route 3 sketch pulse 1, pulse 2, wave, and noise channels"></canvas>
+            </figure>
+          </div>
+          <figure class="sample-diagram route3-mixed-visual">
+            <canvas data-composition-visual="route3-full-mixed" aria-label="Route 3 sketch combined waveform"></canvas>
+            <figcaption>The top graph shows the separate channels. The bottom graph is what happens when we add them together.</figcaption>
+          </figure>
+          <div class="code-actions">
+            <button data-play="route3-full" data-visual="route3-full">Play All Four</button>
+            <button data-play="route3-pulse-1" data-visual="route3-full">Pulse 1 Only</button>
+            <button data-play="route3-pulse-2" data-visual="route3-full">Pulse 2 Only</button>
+            <button data-play="route3-wave" data-visual="route3-full">Wave Only</button>
+            <button data-play="route3-noise" data-visual="route3-full">Noise Only</button>
+          </div>
+          <p>
+            Thats the reason this channel matters. The wave channel is not just some extra
+            academic detail. It is how you get another pitched line when the two fixed
+            pulse channels are already busy.
+          </p>
+        </section>
+      </section>
+
+      <section class="next-links">
+        <a href="index.html">Back to index</a>
+        <a href="05-composition.html">Back to Bottling It Up</a>
+        <a href="bonus-lfsr.html">Bonus: LFSR Noise</a>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

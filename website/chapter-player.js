@@ -6,11 +6,84 @@ let cursorFrame = null;
 let activeVisualName = null;
 let waveAudioContext = null;
 let activeWave = null;
+let liveRandomNoise = null;
+let variedNoiseLoop = null;
 
 const waveRenderState = {
   square: { frequency: 220, volume: 0.42, phase: 0 },
   triangle: { frequency: 220, volume: 0.42, phase: 0 },
+  sine: { frequency: 220, volume: 0.42, phase: 0 },
+  pulse: { frequency: 220, volume: 0.42, phase: 0, duty: 0.25 },
 };
+
+const GAMEBOY_DUTIES = [0.125, 0.25, 0.5, 0.75];
+
+const wavetableToyState = {
+  frequency: 220,
+  volume: 0.22,
+  table: [
+    1, 1, 1, 1, 1, 1, 1, 1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+  ],
+};
+
+const WAVE_STREAM_CLIPS = {
+  fight: {
+    source: "assets/audio/wavetable/fight-source.wav",
+    raced: "assets/audio/wavetable/fight-raced.wav",
+    dmg: "assets/audio/wavetable/fight-dmg.wav",
+  },
+  scream: {
+    source: "assets/audio/wavetable/scream-source.wav",
+    raced: "assets/audio/wavetable/scream-raced.wav",
+    dmg: "assets/audio/wavetable/scream-dmg.wav",
+  },
+  roar: {
+    source: "assets/audio/wavetable/roar-source.wav",
+    raced: "assets/audio/wavetable/roar-raced.wav",
+    dmg: "assets/audio/wavetable/roar-dmg.wav",
+  },
+  crash: {
+    source: "assets/audio/wavetable/crash-source.wav",
+    raced: "assets/audio/wavetable/crash-raced.wav",
+    dmg: "assets/audio/wavetable/crash-dmg.wav",
+  },
+  cat: {
+    source: "assets/audio/wavetable/cat-source.wav",
+    raced: "assets/audio/wavetable/cat-raced.wav",
+    dmg: "assets/audio/wavetable/cat-dmg.wav",
+  },
+  laser: {
+    source: "assets/audio/wavetable/laser-source.wav",
+    raced: "assets/audio/wavetable/laser-raced.wav",
+    dmg: "assets/audio/wavetable/laser-dmg.wav",
+  },
+  glass: {
+    source: "assets/audio/wavetable/glass-source.wav",
+    raced: "assets/audio/wavetable/glass-raced.wav",
+    dmg: "assets/audio/wavetable/glass-dmg.wav",
+  },
+  step: {
+    source: "assets/audio/wavetable/step-source.wav",
+    raced: "assets/audio/wavetable/step-raced.wav",
+    dmg: "assets/audio/wavetable/step-dmg.wav",
+  },
+};
+
+const WAV_FILE_VISUALS = {
+  "pikachu-yellow-target": [
+    ["yellow_target", "assets/audio/wavetable/pikachu-yellow-target.wav", "#6d4bd4"],
+  ],
+  "pikachu-user-crush": [
+    ["pikachu.wav", "assets/audio/wavetable/pikachu-user-source.wav", "#ff9f1c"],
+    ["yellow_1bit", "assets/audio/wavetable/pikachu-user-yellow-1bit.wav", "#0c9b58"],
+  ],
+};
+
+const wavFileCache = new Map();
+const wavVisualLoading = new Set();
 
 const PALLET_BEAT_SECONDS = 0.5;
 const PALLET_LEAD = [
@@ -131,6 +204,51 @@ const PALLET_BACKING = [
   [62, 1.98958, "F#4"],
 ];
 
+const ROUTE3_UNIT_SECONDS = 60 / 148 / 4;
+const ROUTE3_TOTAL_STEPS = 104;
+const ROUTE3_PULSE_1 = [
+  ["E3", 0, 6], ["D3", 6, 1], ["E3", 7, 1], ["C3", 8, 4],
+  ["E3", 12, 4], ["C3", 16, 6], ["D3", 22, 1], ["E3", 23, 1],
+  ["F3", 24, 2], ["G3", 26, 2], ["G3", 28, 2], ["A3", 30, 2],
+  ["A#3", 32, 8], ["F3", 40, 8], ["D3", 48, 8], ["F3", 56, 8],
+];
+const ROUTE3_PULSE_2 = [
+  ["C4", 0, 6], ["G3", 6, 1], ["C4", 7, 1], ["E4", 8, 10],
+  ["G3", 18, 2], ["C4", 20, 2], ["G4", 22, 2], ["F4", 24, 2],
+  ["E4", 26, 2], ["D4", 28, 2], ["C4", 30, 2], ["D4", 32, 8],
+  ["F4", 40, 8], ["A#3", 48, 8], ["A3", 56, 8],
+];
+const ROUTE3_DRUMS = [
+  [0, 17, 12], [12, 17, 2], [14, 18, 2], [16, 17, 4], [20, 17, 4],
+  [24, 19, 1], [25, 19, 1], [26, 19, 1], [27, 19, 1],
+  [28, 18, 1], [29, 18, 1], [30, 18, 1], [31, 18, 1],
+];
+const ROUTE3_WAVE = [
+  ["E4", 0, 1], ["REST", 1, 1], ["G4", 2, 4],
+  ["E4", 6, 1], ["E4", 7, 1], ["E4", 8, 1], ["REST", 9, 1],
+  ["E4", 10, 1], ["REST", 11, 1], ["G4", 12, 4],
+  ["E4", 16, 1], ["REST", 17, 1], ["G4", 18, 4],
+  ["E4", 22, 1], ["E4", 23, 1], ["E4", 24, 1], ["REST", 25, 1],
+  ["E4", 26, 1], ["REST", 27, 1], ["G4", 28, 2], ["A4", 30, 2],
+  ["F4", 32, 1], ["REST", 33, 1], ["A#4", 34, 4],
+  ["F4", 38, 1], ["F4", 39, 1], ["F4", 40, 1], ["REST", 41, 1],
+  ["F4", 42, 1], ["REST", 43, 1], ["A#4", 44, 4],
+  ["F4", 48, 1], ["REST", 49, 1], ["A#4", 50, 4],
+  ["F4", 54, 1], ["F4", 55, 1], ["F4", 56, 1], ["REST", 57, 1],
+  ["F4", 58, 1], ["REST", 59, 1], ["A#4", 60, 2], ["F4", 62, 2],
+];
+const GAMEBOYISH_PULSE_WAVETABLE = [
+  15, 15, 15, 15, 15, 15, 15, 15,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  15, 15, 15, 15, 15, 15, 15, 15,
+  0, 0, 0, 0, 0, 0, 0, 0,
+];
+let route3HoverId = null;
+let route3HoverTime = null;
+const route3CanvasHitboxes = new WeakMap();
+let route3VisualCache = null;
+const route3VariantVisualCache = new Map();
+
 function sineSample(index, frequency, volume) {
   const time = index / CHAPTER_SAMPLE_RATE;
   return Math.sin(2 * Math.PI * frequency * time) * volume;
@@ -166,15 +284,12 @@ function lfsrNoise(seconds, volume, options = {}) {
   const samples = new Float32Array(sampleCount);
   let lfsr = 0x7fff;
   let current = 1;
-  let timer = 0;
-  const clockHz = options.clockHz || 5000;
+  const holdSamples = Math.max(1, Math.round(options.holdSamples || 9));
   const fadeSeconds = options.fadeSeconds || 0.45;
   const tap = options.tap || (options.shortMode ? 6 : 1);
 
   for (let i = 0; i < samples.length; i += 1) {
-    timer += 1 / CHAPTER_SAMPLE_RATE;
-    if (timer >= 1 / clockHz) {
-      timer -= 1 / clockHz;
+    if (i % holdSamples === 0) {
       const bit = (lfsr ^ (lfsr >> tap)) & 1;
       lfsr = (lfsr >> 1) | (bit << 14);
       current = lfsr & 1 ? -1 : 1;
@@ -197,6 +312,34 @@ function randomNoise(seconds, volume) {
   return samples;
 }
 
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function heldRandomNoise({ seconds = 0.8, volume = 0.22, holdSamples = 9, fadeSeconds = 0, random = Math.random }) {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
+  const samples = new Float32Array(sampleCount);
+  const hold = Math.max(1, Math.round(holdSamples));
+  let current = random() * 2 - 1;
+
+  for (let i = 0; i < samples.length; i += 1) {
+    if (i % hold === 0) {
+      current = random() * 2 - 1;
+    }
+
+    const fade = fadeSeconds > 0
+      ? Math.max(0, 1 - i / (CHAPTER_SAMPLE_RATE * fadeSeconds))
+      : 1;
+    samples[i] = current * volume * fade;
+  }
+
+  return samples;
+}
+
 function bitFeedback(mode, a, b, c) {
   if (mode === "xor") return a ^ b;
   if (mode === "xnor") return 1 - (a ^ b);
@@ -210,18 +353,16 @@ function bitFeedback(mode, a, b, c) {
   return a ^ b;
 }
 
-function feedbackShiftNoise({ mode, length, tapA, tapB, clockHz, seconds = 0.85, volume = 0.34 }) {
+function feedbackShiftNoise({ mode, length, tapA, tapB, holdSamples, seconds = 0.85, volume = 0.34 }) {
   const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
   const samples = new Float32Array(sampleCount);
   let register = (1 << Math.min(length, 30)) - 1;
   let current = 1;
-  let timer = 0;
+  const hold = Math.max(1, Math.round(holdSamples || 9));
   const mask = (1 << Math.min(length, 30)) - 1;
 
   for (let i = 0; i < samples.length; i += 1) {
-    timer += 1 / CHAPTER_SAMPLE_RATE;
-    if (timer >= 1 / clockHz) {
-      timer -= 1 / clockHz;
+    if (i % hold === 0) {
       const a = register & 1;
       const b = (register >> tapA) & 1;
       const c = (register >> tapB) & 1;
@@ -249,17 +390,15 @@ function continuousFeedback(mode, a, b, c, drive) {
   return Math.tanh((a - b) * drive);
 }
 
-function continuousShiftNoise({ mode, length, tapA, tapB, drive, clockHz, seconds = 1.0, volume = 0.30 }) {
+function continuousShiftNoise({ mode, length, tapA, tapB, drive, holdSamples, seconds = 1.0, volume = 0.30 }) {
   const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
   const samples = new Float32Array(sampleCount);
   const state = Array.from({ length }, (_, i) => Math.sin(i * 12.9898));
   let current = state[state.length - 1];
-  let timer = 0;
+  const hold = Math.max(1, Math.round(holdSamples || 5));
 
   for (let i = 0; i < samples.length; i += 1) {
-    timer += 1 / CHAPTER_SAMPLE_RATE;
-    if (timer >= 1 / clockHz) {
-      timer -= 1 / clockHz;
+    if (i % hold === 0) {
       const a = state[state.length - 1];
       const b = state[state.length - 1 - (tapA % state.length)];
       const c = state[state.length - 1 - (tapB % state.length)];
@@ -275,11 +414,252 @@ function continuousShiftNoise({ mode, length, tapA, tapB, drive, clockHz, second
   return samples;
 }
 
+function midiReadString(view, offset, length) {
+  let text = "";
+  for (let i = 0; i < length; i += 1) text += String.fromCharCode(view.getUint8(offset + i));
+  return text;
+}
+
+function midiReadVar(view, cursor) {
+  let value = 0;
+  while (true) {
+    const byte = view.getUint8(cursor.offset);
+    cursor.offset += 1;
+    value = (value << 7) | (byte & 0x7f);
+    if ((byte & 0x80) === 0) return value;
+  }
+}
+
+function midiTickToSeconds(tick, tempos, ticksPerBeat) {
+  let seconds = 0;
+  let previousTick = 0;
+  let mpq = 500000;
+
+  for (const tempo of tempos) {
+    if (tempo.tick > tick) break;
+    seconds += ((tempo.tick - previousTick) / ticksPerBeat) * (mpq / 1000000);
+    previousTick = tempo.tick;
+    mpq = tempo.mpq;
+  }
+
+  seconds += ((tick - previousTick) / ticksPerBeat) * (mpq / 1000000);
+  return seconds;
+}
+
+function parseMidi(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  let offset = 0;
+
+  if (midiReadString(view, offset, 4) !== "MThd") throw new Error("Missing MIDI header");
+  offset += 4;
+  const headerLength = view.getUint32(offset); offset += 4;
+  const format = view.getUint16(offset); offset += 2;
+  const trackCount = view.getUint16(offset); offset += 2;
+  const ticksPerBeat = view.getUint16(offset); offset += 2;
+  offset = 8 + headerLength;
+
+  const events = [];
+  const tempos = [{ tick: 0, mpq: 500000 }];
+  const trackNames = [];
+
+  for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+    if (midiReadString(view, offset, 4) !== "MTrk") throw new Error("Missing MIDI track");
+    offset += 4;
+    const trackLength = view.getUint32(offset); offset += 4;
+    const end = offset + trackLength;
+    const cursor = { offset };
+    let tick = 0;
+    let runningStatus = 0;
+    let trackName = "";
+
+    while (cursor.offset < end) {
+      tick += midiReadVar(view, cursor);
+      let status = view.getUint8(cursor.offset);
+
+      if (status < 0x80) {
+        status = runningStatus;
+      } else {
+        cursor.offset += 1;
+        if (status < 0xf0) runningStatus = status;
+      }
+
+      if (status === 0xff) {
+        const metaType = view.getUint8(cursor.offset); cursor.offset += 1;
+        const length = midiReadVar(view, cursor);
+        if (metaType === 0x51 && length === 3) {
+          const mpq = (view.getUint8(cursor.offset) << 16) | (view.getUint8(cursor.offset + 1) << 8) | view.getUint8(cursor.offset + 2);
+          tempos.push({ tick, mpq });
+        } else if (metaType === 0x03) {
+          trackName = midiReadString(view, cursor.offset, length);
+        }
+        cursor.offset += length;
+        continue;
+      }
+
+      if (status === 0xf0 || status === 0xf7) {
+        const length = midiReadVar(view, cursor);
+        cursor.offset += length;
+        continue;
+      }
+
+      const type = status & 0xf0;
+      const channel = status & 0x0f;
+      const data1 = view.getUint8(cursor.offset); cursor.offset += 1;
+      let data2 = 0;
+      if (type !== 0xc0 && type !== 0xd0) {
+        data2 = view.getUint8(cursor.offset); cursor.offset += 1;
+      }
+
+      if (type === 0x90 || type === 0x80) {
+        events.push({
+          tick,
+          trackIndex,
+          channel,
+          note: data1,
+          velocity: type === 0x90 ? data2 : 0,
+        });
+      }
+    }
+
+    trackNames[trackIndex] = trackName;
+    offset = end;
+  }
+
+  tempos.sort((a, b) => a.tick - b.tick);
+  events.sort((a, b) => a.tick - b.tick);
+
+  const active = new Map();
+  const notes = [];
+
+  for (const event of events) {
+    const key = `${event.trackIndex}:${event.channel}:${event.note}`;
+    if (event.velocity > 0) {
+      if (!active.has(key)) active.set(key, []);
+      active.get(key).push(event);
+    } else if (active.has(key) && active.get(key).length) {
+      const start = active.get(key).shift();
+      notes.push({
+        trackIndex: start.trackIndex,
+        channel: start.channel,
+        note: start.note,
+        velocity: start.velocity,
+        start: midiTickToSeconds(start.tick, tempos, ticksPerBeat),
+        end: midiTickToSeconds(event.tick, tempos, ticksPerBeat),
+      });
+    }
+  }
+
+  return { format, trackCount, ticksPerBeat, trackNames, notes };
+}
+
+function midiNoteFrequency(note) {
+  return 440 * (2 ** ((note - 69) / 12));
+}
+
+function midiGroupId(note) {
+  return `${note.trackIndex}:${note.channel}`;
+}
+
+function midiGroupLabel(group, trackNames) {
+  const trackName = trackNames[group.trackIndex] ? ` ${trackNames[group.trackIndex]}` : "";
+  const channelName = group.channel === 9 ? "percussion" : `channel ${group.channel + 1}`;
+  return `track ${group.trackIndex + 1}${trackName} / ${channelName} / ${group.count} notes`;
+}
+
+function renderMidiPreview(midi, enabledGroups) {
+  const maxSeconds = 32;
+  const lastEnd = midi.notes.reduce((latest, note) => Math.max(latest, note.end), 0);
+  const seconds = Math.min(maxSeconds, Math.max(1, lastEnd));
+  const samples = new Float32Array(Math.floor(seconds * CHAPTER_SAMPLE_RATE));
+  const groupOrder = Array.from(new Set(midi.notes.map(midiGroupId)));
+
+  for (const note of midi.notes) {
+    if (note.start >= seconds || !enabledGroups.has(midiGroupId(note))) continue;
+    const duration = Math.max(0.03, Math.min(note.end - note.start, seconds - note.start));
+    const volume = Math.min(0.16, 0.05 + note.velocity / 127 * 0.10);
+
+    if (note.channel === 9) {
+      addNoiseHit(samples, note.start, Math.min(0.10, duration), volume * 2.2);
+      continue;
+    }
+
+    const voiceIndex = groupOrder.indexOf(midiGroupId(note)) % 3;
+    const frequency = midiNoteFrequency(note.note);
+    if (voiceIndex === 0) addWaveNote(samples, squareSample, frequency, note.start, duration, volume);
+    else if (voiceIndex === 1) addPulseNote(samples, frequency, note.start, duration, volume, 0.25);
+    else addWaveNote(samples, triangleSample, frequency, note.start, duration, volume * 0.8);
+  }
+
+  return samples;
+}
+
 function waveTableSample(index, frequency, volume, table) {
   const time = index / CHAPTER_SAMPLE_RATE;
   const phase = (frequency * time) % 1;
   const tableIndex = Math.floor(phase * table.length) % table.length;
   return table[tableIndex] * volume;
+}
+
+function gameBoyWaveSample(index, frequency, volume, table = GAMEBOYISH_PULSE_WAVETABLE) {
+  const time = index / CHAPTER_SAMPLE_RATE;
+  const phase = (frequency * time) % 1;
+  const tableIndex = Math.floor(phase * table.length) % table.length;
+  return ((table[tableIndex] / 15) * 2 - 1) * volume;
+}
+
+function wavetableVisualSample(i, frequency, table, visualRate) {
+  const time = i / visualRate;
+  const phase = (frequency * time) % 1;
+  const tableIndex = Math.floor(phase * table.length) % table.length;
+  return table[tableIndex];
+}
+
+function wavetableFromPreset(preset) {
+  if (preset === "triangle") {
+    return Array.from({ length: 32 }, (_, i) => {
+      const phase = i / 32;
+      return 1 - 4 * Math.abs(phase - 0.5);
+    });
+  }
+
+  if (preset === "saw") {
+    return Array.from({ length: 32 }, (_, i) => (i / 31) * 2 - 1);
+  }
+
+  if (preset === "stair") {
+    return Array.from({ length: 32 }, (_, i) => {
+      if (i < 8) return -0.75;
+      if (i < 16) return -0.15;
+      if (i < 24) return 0.35;
+      return 0.85;
+    });
+  }
+
+  if (preset === "soft") {
+    return Array.from({ length: 32 }, (_, i) => (
+      Math.sin(2 * Math.PI * i / 32) * 0.72
+      + Math.sin(4 * Math.PI * i / 32) * 0.18
+    ));
+  }
+
+  return Array.from({ length: 32 }, (_, i) => (i % 16 < 8 ? 1 : -1));
+}
+
+function buildWavetableToySamples(seconds = 1.2) {
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * seconds);
+  const samples = new Float32Array(sampleCount);
+
+  for (let i = 0; i < samples.length; i += 1) {
+    const fade = Math.min(1, i / 600, (samples.length - i) / 600);
+    samples[i] = waveTableSample(
+      i,
+      wavetableToyState.frequency,
+      wavetableToyState.volume,
+      wavetableToyState.table,
+    ) * fade;
+  }
+
+  return samples;
 }
 
 function buildTone({ seconds = 1, frequency = 220, volume = 0.35, type = "sine" }) {
@@ -486,7 +866,28 @@ function noteFrequency(note) {
     A6: 1760.00,
     B6: 1975.53,
   };
-  return notes[note];
+  if (notes[note]) return notes[note];
+
+  const match = note.match(/^([A-G]#?)(-?\d+)$/);
+  if (!match) return 440;
+
+  const noteOffsets = {
+    C: 0,
+    "C#": 1,
+    D: 2,
+    "D#": 3,
+    E: 4,
+    F: 5,
+    "F#": 6,
+    G: 7,
+    "G#": 8,
+    A: 9,
+    "A#": 10,
+    B: 11,
+  };
+  const octave = Number(match[2]);
+  const midiNote = (octave + 1) * 12 + noteOffsets[match[1]];
+  return midiNoteFrequency(midiNote);
 }
 
 function buildSequence() {
@@ -558,6 +959,309 @@ function buildComposition() {
   return samples;
 }
 
+function buildRoute3Sketch() {
+  const songLength = ROUTE3_TOTAL_STEPS * ROUTE3_UNIT_SECONDS;
+  const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * songLength));
+
+  for (const [note, start, length] of ROUTE3_PULSE_1) {
+    addPulseNote(samples, noteFrequency(note), start * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, 0.10, 0.50);
+  }
+
+  for (const [note, start, length] of ROUTE3_PULSE_2) {
+    addPulseNote(samples, noteFrequency(note), start * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, 0.12, 0.25);
+  }
+
+  for (let bar = 0; bar < 3; bar += 1) {
+    const barStart = bar * 32 * ROUTE3_UNIT_SECONDS;
+    for (let index = 0; index < ROUTE3_DRUMS.length; index += 1) {
+      const [offset, drum, length] = ROUTE3_DRUMS[index];
+      const hold = drum === 19 ? 8 : drum === 18 ? 18 : 42;
+      const volume = drum === 19 ? 0.18 : drum === 18 ? 0.16 : 0.22;
+      addSeededRandomNoiseHit(samples, barStart + offset * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, volume, hold, 3200 + bar * 100 + index);
+    }
+  }
+
+  return samples;
+}
+
+function route3FullChannels() {
+  const songLength = ROUTE3_TOTAL_STEPS * ROUTE3_UNIT_SECONDS;
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * songLength);
+  const pulse1 = new Float32Array(sampleCount);
+  const pulse2 = new Float32Array(sampleCount);
+  const wave = new Float32Array(sampleCount);
+  const noise = new Float32Array(sampleCount);
+
+  for (const [note, start, length] of ROUTE3_PULSE_1) {
+    addPulseNote(pulse1, noteFrequency(note), start * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, 0.10, 0.50);
+  }
+
+  for (const [note, start, length] of ROUTE3_PULSE_2) {
+    addPulseNote(pulse2, noteFrequency(note), start * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, 0.11, 0.25);
+  }
+
+  for (const [note, start, length] of ROUTE3_WAVE) {
+    if (note === "REST") continue;
+    addWaveTableNote(wave, noteFrequency(note), start * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, 0.09, GAMEBOYISH_PULSE_WAVETABLE);
+  }
+
+  for (let bar = 0; bar < 3; bar += 1) {
+    const barStart = bar * 32 * ROUTE3_UNIT_SECONDS;
+    for (let index = 0; index < ROUTE3_DRUMS.length; index += 1) {
+      const [offset, drum, length] = ROUTE3_DRUMS[index];
+      const hold = drum === 19 ? 8 : drum === 18 ? 18 : 42;
+      const volume = drum === 19 ? 0.16 : drum === 18 ? 0.14 : 0.19;
+      addSeededRandomNoiseHit(noise, barStart + offset * ROUTE3_UNIT_SECONDS, length * ROUTE3_UNIT_SECONDS, volume, hold, 5200 + bar * 100 + index);
+    }
+  }
+
+  const mixed = addVisualVoices(addVisualVoices(addVisualVoices(pulse1, pulse2), wave), noise);
+  return { pulse1, pulse2, wave, noise, mixed, songLength };
+}
+
+function buildRoute3FullSketch() {
+  return route3FullChannels().mixed;
+}
+
+function buildRoute3IsolatedChannel(channelName) {
+  const channels = route3FullChannels();
+  if (channelName === "pulse1") return channels.pulse1;
+  if (channelName === "pulse2") return channels.pulse2;
+  if (channelName === "wave") return channels.wave;
+  if (channelName === "noise") return channels.noise;
+  return channels.mixed;
+}
+
+function buildRoute3Event(id) {
+  if (id.startsWith("route3-p1-")) {
+    const index = Number(id.replace("route3-p1-", ""));
+    const [note, , length] = ROUTE3_PULSE_1[index] || [];
+    if (!note) return null;
+    const duration = length * ROUTE3_UNIT_SECONDS;
+    const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * (duration + 0.04)));
+    addPulseNote(samples, noteFrequency(note), 0, duration, 0.18, 0.50);
+    return samples;
+  }
+
+  if (id.startsWith("route3-p2-")) {
+    const index = Number(id.replace("route3-p2-", ""));
+    const [note, , length] = ROUTE3_PULSE_2[index] || [];
+    if (!note) return null;
+    const duration = length * ROUTE3_UNIT_SECONDS;
+    const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * (duration + 0.04)));
+    addPulseNote(samples, noteFrequency(note), 0, duration, 0.18, 0.25);
+    return samples;
+  }
+
+  if (id.startsWith("route3-w-")) {
+    const index = Number(id.replace("route3-w-", ""));
+    const [note, , length] = ROUTE3_WAVE[index] || [];
+    if (!note || note === "REST") return null;
+    const duration = length * ROUTE3_UNIT_SECONDS;
+    const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * (duration + 0.04)));
+    addWaveTableNote(samples, noteFrequency(note), 0, duration, 0.18, GAMEBOYISH_PULSE_WAVETABLE);
+    return samples;
+  }
+
+  if (id.startsWith("route3-n-0-")) {
+    const index = Number(id.replace("route3-n-0-", ""));
+    const [, drum, length] = ROUTE3_DRUMS[index] || [];
+    if (!drum) return null;
+    const hold = drum === 19 ? 8 : drum === 18 ? 18 : 42;
+    const volume = drum === 19 ? 0.26 : drum === 18 ? 0.24 : 0.30;
+    const duration = length * ROUTE3_UNIT_SECONDS;
+    const samples = new Float32Array(Math.floor(CHAPTER_SAMPLE_RATE * (duration + 0.04)));
+    addSeededRandomNoiseHit(samples, 0, duration, volume, hold, 4400 + index);
+    return samples;
+  }
+
+  return null;
+}
+
+function playRoute3Event(id) {
+  const samples = buildRoute3Event(id);
+  if (!samples) return;
+  playSamples(samples, null, null, null);
+}
+
+function route3OverviewFrequency(note) {
+  return Math.max(2.2, Math.min(7.5, noteFrequency(note) / 95));
+}
+
+function addRoute3OverviewNoise(output, startSeconds, durationSeconds, volume, holdSamples, seed, visualRate) {
+  const start = Math.floor(startSeconds * visualRate);
+  const length = Math.floor(durationSeconds * visualRate);
+  const hold = Math.max(1, Math.round(holdSamples / 10));
+  const random = seededRandom(seed);
+  let current = random() * 2 - 1;
+
+  for (let i = 0; i < length; i += 1) {
+    const outputIndex = start + i;
+    if (outputIndex >= output.length) break;
+    if (i % hold === 0) current = random() * 2 - 1;
+    const fade = Math.max(0, 1 - i / Math.max(1, length));
+    output[outputIndex] += current * volume * fade;
+  }
+}
+
+function route3SketchVisualData() {
+  if (route3VisualCache) return route3VisualCache;
+
+  const duration = ROUTE3_TOTAL_STEPS * ROUTE3_UNIT_SECONDS;
+  const sampleCount = Math.floor(CHAPTER_SAMPLE_RATE * duration);
+  const overviewRate = 180;
+  const overviewSampleCount = Math.floor(overviewRate * duration);
+  const pulse1 = new Float32Array(sampleCount);
+  const pulse2 = new Float32Array(sampleCount);
+  const noise = new Float32Array(sampleCount);
+  const overviewPulse1 = new Float32Array(overviewSampleCount);
+  const overviewPulse2 = new Float32Array(overviewSampleCount);
+  const overviewNoise = new Float32Array(overviewSampleCount);
+  const events = [];
+
+  ROUTE3_PULSE_1.forEach(([note, start, length], index) => {
+    const startSeconds = start * ROUTE3_UNIT_SECONDS;
+    const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+    addPulseNote(pulse1, noteFrequency(note), startSeconds, durationSeconds, 0.10, 0.50);
+    addVisualNote(overviewPulse1, "square", route3OverviewFrequency(note), startSeconds, durationSeconds, 0.72, overviewRate);
+    events.push({ id: `route3-p1-${index}`, lane: 0, start: startSeconds, duration: durationSeconds, label: note });
+  });
+
+  ROUTE3_PULSE_2.forEach(([note, start, length], index) => {
+    const startSeconds = start * ROUTE3_UNIT_SECONDS;
+    const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+    addPulseNote(pulse2, noteFrequency(note), startSeconds, durationSeconds, 0.12, 0.25);
+    addVisualNote(overviewPulse2, "pulse", route3OverviewFrequency(note), startSeconds, durationSeconds, 0.72, overviewRate);
+    events.push({ id: `route3-p2-${index}`, lane: 1, start: startSeconds, duration: durationSeconds, label: note });
+  });
+
+  for (let bar = 0; bar < 3; bar += 1) {
+    const barStart = bar * 32 * ROUTE3_UNIT_SECONDS;
+    ROUTE3_DRUMS.forEach(([offset, drum, length], index) => {
+      const startSeconds = barStart + offset * ROUTE3_UNIT_SECONDS;
+      const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+      const hold = drum === 19 ? 8 : drum === 18 ? 18 : 42;
+      const volume = drum === 19 ? 0.18 : drum === 18 ? 0.16 : 0.22;
+      addSeededRandomNoiseHit(noise, startSeconds, durationSeconds, volume, hold, 3200 + bar * 100 + index);
+      addRoute3OverviewNoise(overviewNoise, startSeconds, durationSeconds, 0.72, hold, 3200 + bar * 100 + index, overviewRate);
+      events.push({ id: `route3-n-0-${index}`, lane: 2, start: startSeconds, duration: durationSeconds, label: `drum ${drum}` });
+    });
+  }
+
+  const output = addVisualVoices(addVisualVoices(pulse1, pulse2), noise);
+  const channelLanes = [
+    ["voice_1", pulse1, "#f97316"],
+    ["voice_2", pulse2, "#2563eb"],
+    ["noise", noise, "#e6468a"],
+  ];
+  const overviewLanes = [
+    ["voice_1", overviewPulse1, "#f97316"],
+    ["voice_2", overviewPulse2, "#2563eb"],
+    ["noise", overviewNoise, "#e6468a"],
+  ];
+  const lanes = [
+    ...channelLanes,
+    ["mixed", output, "#10845b"],
+  ];
+  route3VisualCache = {
+    duration,
+    events,
+    channelLanes,
+    overviewLanes,
+    mixedLanes: [
+      ["mixed", output, "#10845b"],
+    ],
+    normalizeLanes: true,
+    lanePeaks: lanes.map(([, samples]) => {
+      let peak = 0;
+      for (let i = 0; i < samples.length; i += 1) {
+        peak = Math.max(peak, Math.abs(samples[i]));
+      }
+      return peak;
+    }),
+    lanes,
+  };
+  return route3VisualCache;
+}
+
+function route3FullVisualData() {
+  const cacheName = "route3-full";
+  if (route3VariantVisualCache.has(cacheName)) return route3VariantVisualCache.get(cacheName);
+
+  const duration = ROUTE3_TOTAL_STEPS * ROUTE3_UNIT_SECONDS;
+  const visualRate = 260;
+  const visualSampleCount = Math.floor(visualRate * duration);
+  const pulse1 = new Float32Array(visualSampleCount);
+  const pulse2 = new Float32Array(visualSampleCount);
+  const wave = new Float32Array(visualSampleCount);
+  const noise = new Float32Array(visualSampleCount);
+  const events = [];
+
+  ROUTE3_PULSE_1.forEach(([note, start, length], index) => {
+    const startSeconds = start * ROUTE3_UNIT_SECONDS;
+    const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+    addVisualNote(pulse1, "square", route3OverviewFrequency(note), startSeconds, durationSeconds, 0.72, visualRate);
+    events.push({ id: `route3-p1-${index}`, lane: 0, start: startSeconds, duration: durationSeconds, label: note });
+  });
+
+  ROUTE3_PULSE_2.forEach(([note, start, length], index) => {
+    const startSeconds = start * ROUTE3_UNIT_SECONDS;
+    const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+    addVisualNote(pulse2, "pulse", route3OverviewFrequency(note), startSeconds, durationSeconds, 0.72, visualRate);
+    events.push({ id: `route3-p2-${index}`, lane: 1, start: startSeconds, duration: durationSeconds, label: note });
+  });
+
+  ROUTE3_WAVE.forEach(([note, start, length], index) => {
+    if (note === "REST") return;
+    const startSeconds = start * ROUTE3_UNIT_SECONDS;
+    const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+    const frequency = route3OverviewFrequency(note);
+    const startIndex = Math.floor(startSeconds * visualRate);
+    const noteLength = Math.floor(durationSeconds * visualRate);
+    for (let i = 0; i < noteLength; i += 1) {
+      const outputIndex = startIndex + i;
+      if (outputIndex >= wave.length) break;
+      const fade = Math.min(1, i / 3, (noteLength - i) / 5);
+      wave[outputIndex] += wavetableVisualSample(i, frequency, wavetableFromPreset("square"), visualRate) * 0.72 * fade;
+    }
+    events.push({ id: `route3-w-${index}`, lane: 2, start: startSeconds, duration: durationSeconds, label: note });
+  });
+
+  for (let bar = 0; bar < 3; bar += 1) {
+    const barStart = bar * 32 * ROUTE3_UNIT_SECONDS;
+    ROUTE3_DRUMS.forEach(([offset, drum, length], index) => {
+      const startSeconds = barStart + offset * ROUTE3_UNIT_SECONDS;
+      const durationSeconds = length * ROUTE3_UNIT_SECONDS;
+      const hold = drum === 19 ? 8 : drum === 18 ? 18 : 42;
+      addRoute3OverviewNoise(noise, startSeconds, durationSeconds, 0.72, hold, 5200 + bar * 100 + index, visualRate);
+      events.push({ id: `route3-n-0-${index}`, lane: 3, start: startSeconds, duration: durationSeconds, label: `drum ${drum}` });
+    });
+  }
+
+  const mixed = addVisualVoices(addVisualVoices(addVisualVoices(pulse1, pulse2), wave), noise);
+  const channelLanes = [
+    ["pulse_1", pulse1, "#f97316"],
+    ["pulse_2", pulse2, "#2563eb"],
+    ["wave", wave, "#6d4bd4"],
+    ["noise", noise, "#e6468a"],
+  ];
+  const lanes = [
+    ...channelLanes,
+    ["mixed", mixed, "#10845b"],
+  ];
+  const data = {
+    duration,
+    events,
+    channelLanes,
+    mixedLanes: [
+      ["mixed", mixed, "#10845b"],
+    ],
+    lanes,
+  };
+  route3VariantVisualCache.set(cacheName, data);
+  return data;
+}
+
 function buildTownSong() {
   const songLength = Math.max(
     eventEnd(PALLET_LEAD.at(-1)),
@@ -603,8 +1307,53 @@ function addPulseNote(samples, frequency, startSeconds, durationSeconds, volume,
   }
 }
 
+function addWaveTableNote(samples, frequency, startSeconds, durationSeconds, volume, table) {
+  const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
+  const length = Math.floor(durationSeconds * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < length; i += 1) {
+    const sampleIndex = start + i;
+    if (sampleIndex >= samples.length) break;
+    const fade = Math.min(1, i / 200, (length - i) / 600);
+    samples[sampleIndex] += gameBoyWaveSample(i, frequency, volume, table) * fade;
+  }
+}
+
 function addNoiseHit(samples, startSeconds, durationSeconds, volume) {
   const hit = lfsrNoise(durationSeconds, volume);
+  const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < hit.length; i += 1) {
+    const sampleIndex = start + i;
+    if (sampleIndex >= samples.length) break;
+    samples[sampleIndex] += hit[i];
+  }
+}
+
+function addRandomNoiseHit(samples, startSeconds, durationSeconds, volume, holdSamples) {
+  const hit = heldRandomNoise({
+    seconds: durationSeconds,
+    volume,
+    holdSamples,
+    fadeSeconds: durationSeconds,
+  });
+  const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
+
+  for (let i = 0; i < hit.length; i += 1) {
+    const sampleIndex = start + i;
+    if (sampleIndex >= samples.length) break;
+    samples[sampleIndex] += hit[i];
+  }
+}
+
+function addSeededRandomNoiseHit(samples, startSeconds, durationSeconds, volume, holdSamples, seed) {
+  const hit = heldRandomNoise({
+    seconds: durationSeconds,
+    volume,
+    holdSamples,
+    fadeSeconds: durationSeconds,
+    random: seededRandom(seed),
+  });
   const start = Math.floor(startSeconds * CHAPTER_SAMPLE_RATE);
 
   for (let i = 0; i < hit.length; i += 1) {
@@ -620,13 +1369,13 @@ function playSamples(samples, button, status, visualName = null) {
   chapterAudioUrl = samplesToWavUrl(samples);
   chapterAudio = new Audio(chapterAudioUrl);
   chapterAudio.onended = () => {
-    button.textContent = button.dataset.label;
+    if (button) button.textContent = button.dataset.label;
     if (status) status.textContent = "";
     stopCursor();
   };
   chapterAudio.play()
     .then(() => {
-      button.textContent = "Stop";
+      if (button) button.textContent = "Stop";
       if (status) status.textContent = "Playing generated samples.";
       startCursor(visualName);
     })
@@ -636,9 +1385,298 @@ function playSamples(samples, button, status, visualName = null) {
     });
 }
 
+function playAudioFile(src, button, status, visualName = null) {
+  stopChapterAudio();
+  if (status) status.textContent = "Loading audio...";
+  chapterAudio = new Audio(src);
+  chapterAudio.onended = () => {
+    if (button) button.textContent = button.dataset.label;
+    if (status) status.textContent = "";
+    stopCursor();
+  };
+  chapterAudio.play()
+    .then(() => {
+      if (button) button.textContent = "Stop";
+      if (status) status.textContent = "";
+      startCursor(visualName);
+    })
+    .catch((error) => {
+      if (status) status.textContent = `Could not start audio: ${error.message}`;
+      else console.error("Could not start audio:", error);
+    });
+}
+
+function decodePcm16Wav(buffer) {
+  const view = new DataView(buffer);
+  if (readAscii(view, 0, 4) !== "RIFF" || readAscii(view, 8, 4) !== "WAVE") {
+    throw new Error("Expected a WAV file");
+  }
+
+  let offset = 12;
+  let channels = 1;
+  let sampleRate = CHAPTER_SAMPLE_RATE;
+  let bitsPerSample = 16;
+  let dataOffset = 0;
+  let dataLength = 0;
+
+  while (offset + 8 <= view.byteLength) {
+    const chunkName = readAscii(view, offset, 4);
+    const chunkSize = view.getUint32(offset + 4, true);
+    const chunkData = offset + 8;
+
+    if (chunkName === "fmt ") {
+      channels = view.getUint16(chunkData + 2, true);
+      sampleRate = view.getUint32(chunkData + 4, true);
+      bitsPerSample = view.getUint16(chunkData + 14, true);
+    } else if (chunkName === "data") {
+      dataOffset = chunkData;
+      dataLength = chunkSize;
+      break;
+    }
+
+    offset = chunkData + chunkSize + (chunkSize % 2);
+  }
+
+  if (!dataOffset || bitsPerSample !== 16) {
+    throw new Error("Expected 16-bit PCM sample data");
+  }
+
+  const frameCount = Math.floor(dataLength / (channels * 2));
+  const samples = new Float32Array(frameCount);
+
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    let sum = 0;
+    for (let channel = 0; channel < channels; channel += 1) {
+      const sampleOffset = dataOffset + (frame * channels + channel) * 2;
+      sum += view.getInt16(sampleOffset, true) / 32768;
+    }
+    samples[frame] = sum / channels;
+  }
+
+  return { sampleRate, samples, duration: samples.length / sampleRate };
+}
+
+function readAscii(view, offset, length) {
+  let text = "";
+  for (let i = 0; i < length; i += 1) {
+    text += String.fromCharCode(view.getUint8(offset + i));
+  }
+  return text;
+}
+
+function loadWavSamples(src) {
+  if (!wavFileCache.has(src)) {
+    const loading = fetch(src)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Could not load ${src}`);
+        return response.arrayBuffer();
+      })
+      .then(decodePcm16Wav)
+      .then((data) => {
+        wavFileCache.set(src, data);
+        return data;
+      });
+    wavFileCache.set(src, loading);
+  }
+
+  return wavFileCache.get(src);
+}
+
+function requestWaveStreamVisual(kind) {
+  const clip = WAVE_STREAM_CLIPS[kind];
+  if (!clip || wavVisualLoading.has(kind)) return;
+  wavVisualLoading.add(kind);
+
+  Promise.all([loadWavSamples(clip.source), loadWavSamples(clip.raced), loadWavSamples(clip.dmg)])
+    .then(() => {
+      drawCompositionVisual(`real-wave-stream-${kind}`, 0);
+    })
+    .catch((error) => console.error("Could not load wavetable sample visual:", error));
+}
+
+function waveStreamVisualData(kind) {
+  const clip = WAVE_STREAM_CLIPS[kind];
+  const fallback = new Float32Array(256);
+  if (!clip) {
+    return { duration: 1, lanes: [["source", fallback, "#ff9f1c"]] };
+  }
+
+  const source = wavFileCache.get(clip.source);
+  const raced = wavFileCache.get(clip.raced);
+  const dmg = wavFileCache.get(clip.dmg);
+  requestWaveStreamVisual(kind);
+
+  if (!source
+    || !raced
+    || !dmg
+    || typeof source.then === "function"
+    || typeof raced.then === "function"
+    || typeof dmg.then === "function") {
+    return {
+      duration: 1,
+      lanes: [
+        ["source", fallback, "#ff9f1c"],
+        ["wave_ram", fallback, "#6d4bd4"],
+        ["dmg-ish", fallback, "#0c9b58"],
+      ],
+    };
+  }
+
+  const duration = Math.max(source.duration, raced.duration, dmg.duration);
+  return {
+    duration,
+    normalizeLanes: true,
+    markers: [
+      [0, "load 32"],
+      [32 / raced.sampleRate, "load"],
+      [64 / raced.sampleRate, "load"],
+    ],
+    lanes: [
+      ["source", source.samples, "#ff9f1c"],
+      ["wave_ram", raced.samples, "#6d4bd4"],
+      ["dmg-ish", dmg.samples, "#0c9b58"],
+    ],
+  };
+}
+
+function requestWavFileVisual(name) {
+  const lanes = WAV_FILE_VISUALS[name];
+  if (!lanes || wavVisualLoading.has(name)) return;
+  wavVisualLoading.add(name);
+
+  Promise.all(lanes.map(([, src]) => loadWavSamples(src)))
+    .then(() => drawCompositionVisual(name, 0))
+    .catch((error) => console.error("Could not load WAV visual:", error));
+}
+
+function wavFileVisualData(name) {
+  const visual = WAV_FILE_VISUALS[name];
+  const fallback = new Float32Array(256);
+  if (!visual) {
+    return { duration: 1, lanes: [["audio", fallback, "#6d4bd4"]] };
+  }
+
+  requestWavFileVisual(name);
+  const loaded = [];
+
+  for (const [label, src, color] of visual) {
+    const data = wavFileCache.get(src);
+    if (!data || typeof data.then === "function") {
+      return {
+        duration: 1,
+        lanes: visual.map(([fallbackLabel,, fallbackColor]) => [fallbackLabel, fallback, fallbackColor]),
+      };
+    }
+    loaded.push([label, data, color]);
+  }
+
+  return {
+    duration: Math.max(...loaded.map(([, data]) => data.duration)),
+    normalizeLanes: true,
+    lanes: loaded.map(([label, data, color]) => [label, data.samples, color]),
+  };
+}
+
+function stopLiveRandomNoise() {
+  if (!liveRandomNoise) return;
+  liveRandomNoise.processor.disconnect();
+  liveRandomNoise.gain.disconnect();
+  liveRandomNoise = null;
+}
+
+function toggleLiveRandomNoise(button) {
+  if (liveRandomNoise) {
+    stopLiveRandomNoise();
+    button.textContent = button.dataset.label;
+    return;
+  }
+
+  stopChapterAudio();
+  waveAudioContext = waveAudioContext || new AudioContext();
+  if (waveAudioContext.state === "suspended") waveAudioContext.resume();
+
+  const processor = waveAudioContext.createScriptProcessor(1024, 0, 1);
+  const gain = waveAudioContext.createGain();
+  let current = Math.random() * 2 - 1;
+  let remaining = 0;
+
+  processor.onaudioprocess = (event) => {
+    const output = event.outputBuffer.getChannelData(0);
+    const hold = Math.max(1, Math.round(randomNoiseToyState.hold));
+
+    for (let i = 0; i < output.length; i += 1) {
+      if (remaining <= 0) {
+        current = Math.random() * 2 - 1;
+        remaining = hold;
+      }
+
+      output[i] = current * randomNoiseToyState.volume;
+      remaining -= 1;
+    }
+  };
+
+  processor.connect(gain);
+  gain.connect(waveAudioContext.destination);
+  liveRandomNoise = { processor, gain };
+  button.textContent = "Stop";
+}
+
+function playRawSamples(samples) {
+  waveAudioContext = waveAudioContext || new AudioContext();
+  if (waveAudioContext.state === "suspended") waveAudioContext.resume();
+
+  const buffer = waveAudioContext.createBuffer(1, samples.length, CHAPTER_SAMPLE_RATE);
+  buffer.copyToChannel(samples, 0);
+
+  const source = waveAudioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(waveAudioContext.destination);
+  source.start();
+}
+
+function randomizedVariedNoiseHit() {
+  const holdDelta = Math.round(variedNoiseToyState.holdDelta);
+  const holdOffset = Math.round((Math.random() * 2 - 1) * holdDelta);
+  const hold = Math.max(1, Math.round(variedNoiseToyState.hold + holdOffset));
+  const fadeOffset = (Math.random() * 2 - 1) * variedNoiseToyState.fadeDelta;
+  const fade = Math.max(0.04, variedNoiseToyState.fade + fadeOffset);
+
+  return heldRandomNoise({
+    seconds: fade,
+    volume: variedNoiseToyState.volume,
+    holdSamples: hold,
+    fadeSeconds: fade,
+  });
+}
+
+function stopVariedNoiseLoop() {
+  if (!variedNoiseLoop) return;
+  clearInterval(variedNoiseLoop);
+  variedNoiseLoop = null;
+  document.querySelectorAll("[data-varied-noise-play]").forEach((button) => {
+    button.textContent = button.dataset.label || "Repeat Varied Hits";
+  });
+}
+
+function startVariedNoiseLoop(button) {
+  if (variedNoiseLoop) {
+    stopVariedNoiseLoop();
+    return;
+  }
+
+  stopChapterAudio();
+  button.textContent = "Stop";
+  playRawSamples(randomizedVariedNoiseHit());
+  variedNoiseLoop = setInterval(() => {
+    playRawSamples(randomizedVariedNoiseHit());
+  }, Math.max(40, variedNoiseToyState.repeat * 1000));
+}
+
 function stopChapterAudio() {
   stopCursor();
   stopWaveAudio();
+  stopLiveRandomNoise();
+  stopVariedNoiseLoop();
   if (chapterAudio) {
     chapterAudio.pause();
     chapterAudio.currentTime = 0;
@@ -651,7 +1689,19 @@ function stopChapterAudio() {
   document.querySelectorAll("[data-play]").forEach((button) => {
     button.textContent = button.dataset.label;
   });
+  document.querySelectorAll("[data-play-file]").forEach((button) => {
+    button.textContent = button.dataset.label;
+  });
   document.querySelectorAll("[data-lfsr-play]").forEach((button) => {
+    button.textContent = button.dataset.label;
+  });
+  document.querySelectorAll("[data-random-noise-play]").forEach((button) => {
+    button.textContent = button.dataset.label;
+  });
+  document.querySelectorAll("[data-faded-noise-play]").forEach((button) => {
+    button.textContent = button.dataset.label;
+  });
+  document.querySelectorAll("[data-midi-play]").forEach((button) => {
     button.textContent = button.dataset.label;
   });
   document.querySelectorAll("[data-feedback-play]").forEach((button) => {
@@ -665,13 +1715,20 @@ function stopChapterAudio() {
 function stopWaveAudio() {
   if (!activeWave) return;
 
-  try {
-    activeWave.oscillator.stop();
-  } catch (error) {
-    // The oscillator may already be stopped by the browser.
+  if (activeWave.oscillator) {
+    try {
+      activeWave.oscillator.stop();
+    } catch (error) {
+      // The oscillator may already be stopped by the browser.
+    }
+    activeWave.oscillator.disconnect();
   }
-  activeWave.oscillator.disconnect();
-  activeWave.gain.disconnect();
+
+  if (activeWave.processor) {
+    activeWave.processor.disconnect();
+  }
+
+  if (activeWave.gain) activeWave.gain.disconnect();
   activeWave.button.textContent = activeWave.button.dataset.label;
   if (activeWave.status) activeWave.status.textContent = "";
   activeWave = null;
@@ -718,6 +1775,17 @@ function samplesToWavUrl(samples) {
   return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
 }
 
+function downloadSamplesAsWav(samples, filename) {
+  const url = samplesToWavUrl(samples);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function writeAscii(view, offset, text) {
   for (let i = 0; i < text.length; i += 1) {
     view.setUint8(offset + i, text.charCodeAt(i));
@@ -737,10 +1805,10 @@ document.querySelectorAll("[data-play]").forEach((button) => {
     const kind = button.dataset.play;
     const visualName = button.dataset.visual || null;
     if (kind === "noise") playSamples(lfsrNoise(0.8, 0.35), button, status, visualName);
-    else if (kind === "noise-low") playSamples(lfsrNoise(0.8, 0.35, { clockHz: 900, fadeSeconds: 0.65 }), button, status, visualName);
-    else if (kind === "noise-bright") playSamples(lfsrNoise(0.6, 0.30, { clockHz: 12000, fadeSeconds: 0.35 }), button, status, visualName);
-    else if (kind === "noise-short") playSamples(lfsrNoise(0.7, 0.32, { clockHz: 6500, fadeSeconds: 0.45, tap: 6 }), button, status, visualName);
-    else if (kind === "noise-click") playSamples(lfsrNoise(0.25, 0.45, { clockHz: 9000, fadeSeconds: 0.08 }), button, status, visualName);
+    else if (kind === "noise-low") playSamples(lfsrNoise(0.8, 0.35, { holdSamples: 49, fadeSeconds: 0.65 }), button, status, visualName);
+    else if (kind === "noise-bright") playSamples(lfsrNoise(0.6, 0.30, { holdSamples: 4, fadeSeconds: 0.35 }), button, status, visualName);
+    else if (kind === "noise-short") playSamples(lfsrNoise(0.7, 0.32, { holdSamples: 7, fadeSeconds: 0.45, tap: 6 }), button, status, visualName);
+    else if (kind === "noise-click") playSamples(lfsrNoise(0.25, 0.45, { holdSamples: 5, fadeSeconds: 0.08 }), button, status, visualName);
     else if (kind === "random-noise") playSamples(randomNoise(0.7, 0.18), button, status, visualName);
     else if (kind === "compose-sequence") playSamples(buildCompositingSequence(), button, status, visualName);
     else if (kind === "compose-overlap") playSamples(buildCompositingOverlap(), button, status, visualName);
@@ -752,8 +1820,35 @@ document.querySelectorAll("[data-play]").forEach((button) => {
     else if (kind === "lookup-sequence") playSamples(buildLookupSequence(), button, status, visualName);
     else if (kind === "two-sequences") playSamples(buildTwoSequences(), button, status, visualName);
     else if (kind === "composition") playSamples(buildComposition(), button, status, visualName);
+    else if (kind === "route3-sketch") playSamples(buildRoute3Sketch(), button, status, visualName);
+    else if (kind === "route3-full") playSamples(buildRoute3FullSketch(), button, status, visualName);
+    else if (kind === "route3-pulse-1") playSamples(buildRoute3IsolatedChannel("pulse1"), button, status, visualName);
+    else if (kind === "route3-pulse-2") playSamples(buildRoute3IsolatedChannel("pulse2"), button, status, visualName);
+    else if (kind === "route3-wave") playSamples(buildRoute3IsolatedChannel("wave"), button, status, visualName);
+    else if (kind === "route3-noise") playSamples(buildRoute3IsolatedChannel("noise"), button, status, visualName);
     else if (kind === "filtered-square") playSamples(buildFilteredSquare(), button, status, visualName);
+    else if (kind === "wavetable-toy") playSamples(buildWavetableToySamples(), button, status, visualName);
     else playSamples(buildTone({ type: kind, frequency: Number(button.dataset.frequency || 220) }), button, status, visualName);
+  });
+});
+
+document.querySelectorAll("[data-play-file]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    const status = button.dataset.status ? document.querySelector(button.dataset.status) : null;
+    if (chapterAudio && button.textContent === "Stop") {
+      stopChapterAudio();
+      if (status) status.textContent = "";
+      return;
+    }
+
+    playAudioFile(button.dataset.playFile, button, status, button.dataset.visual || null);
+  });
+});
+
+document.querySelectorAll("[data-download-route3]").forEach((button) => {
+  button.addEventListener("click", () => {
+    downloadSamplesAsWav(buildRoute3Sketch(), "route-3-sketch.wav");
   });
 });
 
@@ -797,6 +1892,141 @@ function addVisualVoices(a, b) {
 }
 
 function compositionVisualData(name) {
+  if (name === "route3-sketch") {
+    return route3SketchVisualData();
+  }
+
+  if (name === "route3-full") {
+    return route3FullVisualData();
+  }
+
+  if (name === "route3-sketch-channels") {
+    if (route3VariantVisualCache.has(name)) return route3VariantVisualCache.get(name);
+    const data = route3SketchVisualData();
+    const channelData = {
+      ...data,
+      lanes: data.channelLanes,
+      lanePeaks: data.lanePeaks.slice(0, data.channelLanes.length),
+      eventOverview: false,
+    };
+    route3VariantVisualCache.set(name, channelData);
+    return channelData;
+  }
+
+  if (name === "route3-sketch-mixed") {
+    if (route3VariantVisualCache.has(name)) return route3VariantVisualCache.get(name);
+    const data = route3SketchVisualData();
+    const mixedData = {
+      ...data,
+      events: null,
+      lanes: data.mixedLanes,
+      lanePeaks: data.lanePeaks.slice(data.channelLanes.length),
+    };
+    route3VariantVisualCache.set(name, mixedData);
+    return mixedData;
+  }
+
+  if (name === "route3-full-channels") {
+    if (route3VariantVisualCache.has(name)) return route3VariantVisualCache.get(name);
+    const data = route3FullVisualData();
+    const channelData = {
+      ...data,
+      lanes: data.channelLanes,
+    };
+    route3VariantVisualCache.set(name, channelData);
+    return channelData;
+  }
+
+  if (name === "route3-full-mixed") {
+    if (route3VariantVisualCache.has(name)) return route3VariantVisualCache.get(name);
+    const data = route3FullVisualData();
+    const mixedData = {
+      ...data,
+      events: null,
+      lanes: data.mixedLanes,
+    };
+    route3VariantVisualCache.set(name, mixedData);
+    return mixedData;
+  }
+
+  if (name === "wavetable-cycle") {
+    return {
+      duration: 0.10,
+      markers: [
+        [0.000, "sample 0"],
+        [0.025, "sample 8"],
+        [0.050, "sample 16"],
+        [0.075, "sample 24"],
+      ],
+      lanes: [
+        ["one_cycle_table", Float32Array.from(wavetableFromPreset("triangle")), "#6d4bd4"],
+      ],
+    };
+  }
+
+  if (name === "wavetable-loop") {
+    const visualRate = 640;
+    const duration = 0.70;
+    const frequency = 8;
+    const table = wavetableFromPreset("triangle");
+    const samples = new Float32Array(Math.floor(duration * visualRate));
+    for (let i = 0; i < samples.length; i += 1) {
+      samples[i] = wavetableVisualSample(i, frequency, table, visualRate) * 0.74;
+    }
+    return {
+      duration,
+      markers: [
+        [0.000, "cycle 1"],
+        [1 / frequency, "cycle 2"],
+        [2 / frequency, "cycle 3"],
+        [3 / frequency, "cycle 4"],
+      ],
+      lanes: [
+        ["samples", samples, "#6d4bd4"],
+      ],
+    };
+  }
+
+  if (name === "wavetable-pulse") {
+    const visualRate = 900;
+    const duration = 0.52;
+    const table = wavetableFromPreset("square");
+    const samples = new Float32Array(Math.floor(duration * visualRate));
+    for (let i = 0; i < samples.length; i += 1) {
+      samples[i] = wavetableVisualSample(i, 9, table, visualRate) * 0.74;
+    }
+    return {
+      duration,
+      lanes: [
+        ["pseudo_pulse", samples, "#6d4bd4"],
+      ],
+    };
+  }
+
+  if (name === "wavetable-toy-rendered") {
+    const visualRate = 900;
+    const duration = 0.42;
+    const frequency = Math.max(3, wavetableToyState.frequency / 32);
+    const samples = new Float32Array(Math.floor(duration * visualRate));
+    for (let i = 0; i < samples.length; i += 1) {
+      samples[i] = wavetableVisualSample(i, frequency, wavetableToyState.table, visualRate) * wavetableToyState.volume * 2.6;
+    }
+    return {
+      duration,
+      lanes: [
+        ["toy_output", samples, "#6d4bd4"],
+      ],
+    };
+  }
+
+  if (name.startsWith("real-wave-stream-")) {
+    return waveStreamVisualData(name.replace("real-wave-stream-", ""));
+  }
+
+  if (WAV_FILE_VISUALS[name]) {
+    return wavFileVisualData(name);
+  }
+
   const halfSecond = 120;
   const square = makeVisualVoice("square", 0.5, 4, 0.42);
   const triangle = makeVisualVoice("triangle", 0.5, 6, 0.42);
@@ -851,6 +2081,60 @@ function compositionVisualData(name) {
       ],
       lanes: [
         ["samples", samples, "#2563eb"],
+      ],
+    };
+  }
+
+  if (name === "sine-rendered") {
+    const state = waveRenderState.sine;
+    const visualFrequency = state.frequency / 20;
+    const visualRate = 1200;
+    const duration = 0.36;
+    const samples = new Float32Array(Math.floor(duration * visualRate));
+
+    for (let i = 0; i < samples.length; i += 1) {
+      const time = i / visualRate;
+      const phase = (visualFrequency * time + state.phase) % 1;
+      samples[i] = Math.sin(2 * Math.PI * phase) * state.volume;
+    }
+
+    return {
+      duration,
+      markers: [
+        [0.00, "cycle 1"],
+        [1 / visualFrequency, "cycle 2"],
+        [2 / visualFrequency, "cycle 3"],
+        [3 / visualFrequency, "cycle 4"],
+      ],
+      lanes: [
+        ["samples", samples, "#0c9b58"],
+      ],
+    };
+  }
+
+  if (name === "pulse-rendered") {
+    const state = waveRenderState.pulse;
+    const visualFrequency = state.frequency / 20;
+    const visualRate = 1200;
+    const duration = 0.36;
+    const samples = new Float32Array(Math.floor(duration * visualRate));
+
+    for (let i = 0; i < samples.length; i += 1) {
+      const time = i / visualRate;
+      const phase = (visualFrequency * time + state.phase) % 1;
+      samples[i] = phase < state.duty ? state.volume : -state.volume;
+    }
+
+    return {
+      duration,
+      markers: [
+        [0.00, "cycle 1"],
+        [1 / visualFrequency, "cycle 2"],
+        [2 / visualFrequency, "cycle 3"],
+        [3 / visualFrequency, "cycle 4"],
+      ],
+      lanes: [
+        ["samples", samples, "#e94b8a"],
       ],
     };
   }
@@ -1090,6 +2374,19 @@ function addVisualNote(output, shape, frequency, startSeconds, durationSeconds, 
 }
 
 function drawCompositionVisual(name, progress = 0) {
+  if (name === "route3-sketch") {
+    drawCompositionVisual("route3-sketch-channels", progress);
+    drawCompositionVisual("route3-sketch-mixed", progress);
+    drawRoute3Zoom(progress);
+    return;
+  }
+
+  if (name === "route3-full") {
+    drawCompositionVisual("route3-full-channels", progress);
+    drawCompositionVisual("route3-full-mixed", progress);
+    return;
+  }
+
   const canvas = document.querySelector(`[data-composition-visual="${name}"]`);
   if (!canvas) return;
 
@@ -1107,6 +2404,9 @@ function drawCompositionVisual(name, progress = 0) {
   const left = 98;
   const right = width - 18;
   const laneHeight = (height - 34) / data.lanes.length;
+  const graphTop = 22;
+  const graphBottom = 22 + laneHeight * data.lanes.length;
+  const hitboxes = [];
 
   context.font = "12px SFMono-Regular, Consolas, monospace";
   context.lineWidth = 2;
@@ -1114,6 +2414,197 @@ function drawCompositionVisual(name, progress = 0) {
   data.lanes.forEach(([label, samples, color], laneIndex) => {
     const centerY = 22 + laneHeight * laneIndex + laneHeight * 0.5;
     const amplitude = laneHeight * 0.32;
+    const laneTop = 22 + laneHeight * laneIndex;
+    const laneBottom = laneTop + laneHeight;
+    let laneScale = 1;
+
+    if (data.normalizeLanes) {
+      let peak = data.lanePeaks?.[laneIndex] ?? 0;
+      if (!peak) {
+        for (let i = 0; i < samples.length; i += 1) {
+          peak = Math.max(peak, Math.abs(samples[i]));
+        }
+      }
+      laneScale = peak > 0 ? 1 / peak : 1;
+    }
+
+    context.fillStyle = "#5c6470";
+    context.fillText(label, 12, centerY + 4);
+
+    context.strokeStyle = "#d8dde5";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(left, centerY);
+    context.lineTo(right, centerY);
+    context.stroke();
+
+    if (data.events) {
+      for (const event of data.events) {
+        if (event.lane !== laneIndex) continue;
+        const eventLeft = left + (event.start / data.duration) * (right - left);
+        const eventRight = left + ((event.start + event.duration) / data.duration) * (right - left);
+        const active = event.id === route3HoverId;
+        context.fillStyle = active ? "rgba(200, 233, 90, 0.62)" : (data.eventOverview ? color : "rgba(32, 33, 36, 0.018)");
+        context.globalAlpha = active || !data.eventOverview ? 1 : 0.72;
+        const eventWidth = Math.max(2, eventRight - eventLeft);
+        context.fillRect(eventLeft, laneTop + 4, eventWidth, laneHeight - 8);
+        context.globalAlpha = 1;
+        if (data.eventOverview) {
+          context.strokeStyle = active ? "#202124" : "rgba(255, 255, 255, 0.92)";
+          context.lineWidth = active ? 2 : 1;
+          context.strokeRect(eventLeft, laneTop + 4, eventWidth, laneHeight - 8);
+        }
+        hitboxes.push({
+          id: event.id,
+          start: event.start,
+          duration: event.duration,
+          x1: eventLeft,
+          x2: eventRight,
+          y1: laneTop,
+          y2: laneBottom,
+        });
+      }
+    }
+
+    if (data.eventOverview) return;
+
+    context.strokeStyle = color;
+    context.lineWidth = 2;
+    if (samples.length > 5000) {
+      const firstX = Math.floor(left);
+      const lastX = Math.floor(right);
+      const bucketCount = Math.max(1, lastX - firstX + 1);
+      const cacheKey = `${laneIndex}:${bucketCount}`;
+      data.bucketCache = data.bucketCache || new Map();
+      let buckets = data.bucketCache.get(cacheKey);
+
+      if (!buckets) {
+        buckets = [];
+        for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
+          const t1 = bucketIndex / bucketCount;
+          const t2 = (bucketIndex + 1) / bucketCount;
+          const start = Math.max(0, Math.floor(t1 * samples.length));
+          const end = Math.min(samples.length, Math.max(start + 1, Math.ceil(t2 * samples.length)));
+          let min = 0;
+          let max = 0;
+          for (let i = start; i < end; i += 1) {
+            if (samples[i] < min) min = samples[i];
+            if (samples[i] > max) max = samples[i];
+          }
+          buckets.push([min, max]);
+        }
+        data.bucketCache.set(cacheKey, buckets);
+      }
+
+      for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+        const x = firstX + bucketIndex;
+        const [min, max] = buckets[bucketIndex];
+        context.beginPath();
+        context.moveTo(x, centerY - min * laneScale * amplitude);
+        context.lineTo(x, centerY - max * laneScale * amplitude);
+        context.stroke();
+      }
+    } else {
+      context.beginPath();
+      for (let i = 0; i < samples.length; i += 1) {
+        const x = left + (i / (samples.length - 1)) * (right - left);
+        const y = centerY - samples[i] * laneScale * amplitude;
+        if (i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+
+    if (samples.length <= 5000) {
+      context.fillStyle = color;
+      const dotEvery = Math.max(1, Math.floor(samples.length / 42));
+      for (let i = 0; i < samples.length; i += dotEvery) {
+        const x = left + (i / (samples.length - 1)) * (right - left);
+        const y = centerY - samples[i] * laneScale * amplitude;
+        context.beginPath();
+        context.arc(x, y, 2.4, 0, 2 * Math.PI);
+        context.fill();
+      }
+    }
+  });
+  route3CanvasHitboxes.set(canvas, hitboxes);
+
+  if (data.markers) {
+    context.fillStyle = "#202124";
+    context.strokeStyle = "#b9c0cc";
+    context.lineWidth = 1;
+
+    for (const [time, label] of data.markers) {
+      if (time > data.duration) continue;
+      const x = left + (time / data.duration) * (right - left);
+      context.beginPath();
+      context.moveTo(x, graphTop);
+      context.lineTo(x, graphBottom);
+      context.stroke();
+      context.fillText(label, Math.min(x + 5, width - 34), 22);
+    }
+  }
+
+  const cursorX = left + progress * (right - left);
+  context.strokeStyle = "#202124";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(cursorX, graphTop);
+  context.lineTo(cursorX, graphBottom);
+  context.stroke();
+
+  context.fillStyle = "#202124";
+  context.fillText(`${(progress * data.duration).toFixed(2)}s`, Math.min(cursorX + 6, width - 52), Math.min(height - 6, graphBottom + 12));
+
+  if (name === "route3-sketch-channels") {
+    drawRoute3Zoom(progress);
+  }
+}
+
+function drawRoute3Zoom(progress = 0) {
+  const canvas = document.querySelector("[data-route3-zoom]");
+  if (!canvas) return;
+
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.floor(width * pixelRatio);
+  canvas.height = Math.floor(height * pixelRatio);
+
+  const context = canvas.getContext("2d");
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const data = route3SketchVisualData();
+  const sampleRate = data.lanes[0][1].length / data.duration;
+  const hovered = route3HoverId
+    ? data.events.find((event) => event.id === route3HoverId)
+    : null;
+  const center = route3HoverTime
+    ?? (hovered ? hovered.start + Math.min(hovered.duration * 0.5, 0.04) : progress * data.duration);
+  const windowSeconds = 0.06;
+  const startTime = Math.max(0, Math.min(data.duration - windowSeconds, center - windowSeconds * 0.5));
+  const endTime = startTime + windowSeconds;
+  const startIndex = Math.max(0, Math.floor(startTime * sampleRate));
+  const endIndex = Math.min(data.lanes[0][1].length, Math.ceil(endTime * sampleRate));
+  const left = 98;
+  const right = width - 18;
+  const laneHeight = (height - 34) / data.lanes.length;
+  const count = Math.max(1, endIndex - startIndex);
+
+  context.font = "12px SFMono-Regular, Consolas, monospace";
+  context.fillStyle = "#202124";
+  context.fillText(`zoom ${startTime.toFixed(3)}s - ${endTime.toFixed(3)}s`, left, 16);
+
+  data.lanes.forEach(([label, samples, color], laneIndex) => {
+    const centerY = 24 + laneHeight * laneIndex + laneHeight * 0.5;
+    const amplitude = laneHeight * 0.30;
+    let peak = 0;
+
+    for (let i = startIndex; i < endIndex; i += 1) {
+      peak = Math.max(peak, Math.abs(samples[i]));
+    }
+    const laneScale = peak > 0 ? 1 / peak : 1;
 
     context.fillStyle = "#5c6470";
     context.fillText(label, 12, centerY + 4);
@@ -1128,51 +2619,53 @@ function drawCompositionVisual(name, progress = 0) {
     context.strokeStyle = color;
     context.lineWidth = 2;
     context.beginPath();
-    for (let i = 0; i < samples.length; i += 1) {
-      const x = left + (i / (samples.length - 1)) * (right - left);
-      const y = centerY - samples[i] * amplitude;
-      if (i === 0) context.moveTo(x, y);
+    for (let i = startIndex; i < endIndex; i += 1) {
+      const x = left + ((i - startIndex) / Math.max(1, count - 1)) * (right - left);
+      const y = centerY - samples[i] * laneScale * amplitude;
+      if (i === startIndex) context.moveTo(x, y);
       else context.lineTo(x, y);
     }
     context.stroke();
+  });
+}
 
-    context.fillStyle = color;
-    const dotEvery = Math.max(1, Math.floor(samples.length / 42));
-    for (let i = 0; i < samples.length; i += dotEvery) {
-      const x = left + (i / (samples.length - 1)) * (right - left);
-      const y = centerY - samples[i] * amplitude;
-      context.beginPath();
-      context.arc(x, y, 2.4, 0, 2 * Math.PI);
-      context.fill();
-    }
+function currentCompositionProgress(name) {
+  if (
+    chapterAudio
+    && activeVisualName === name
+    && Number.isFinite(chapterAudio.duration)
+    && chapterAudio.duration > 0
+  ) {
+    return Math.min(1, chapterAudio.currentTime / chapterAudio.duration);
+  }
+  return 0;
+}
+
+function setRoute3Hover(id, time = null) {
+  if (route3HoverId === id && route3HoverTime === time) return;
+  route3HoverId = id;
+  route3HoverTime = time;
+
+  document.querySelectorAll("[data-route3-event]").forEach((element) => {
+    element.classList.toggle("is-active", element.dataset.route3Event === id);
   });
 
-  if (data.markers) {
-    context.fillStyle = "#202124";
-    context.strokeStyle = "#b9c0cc";
-    context.lineWidth = 1;
+  drawCompositionVisual("route3-sketch", currentCompositionProgress("route3-sketch"));
+  drawCompositionVisual("route3-full", currentCompositionProgress("route3-full"));
+}
 
-    for (const [time, label] of data.markers) {
-      if (time > data.duration) continue;
-      const x = left + (time / data.duration) * (right - left);
-      context.beginPath();
-      context.moveTo(x, 12);
-      context.lineTo(x, height - 24);
-      context.stroke();
-      context.fillText(label, Math.min(x + 5, width - 34), 22);
-    }
-  }
+function route3HitboxAt(canvas, clientX, clientY) {
+  const hitboxes = route3CanvasHitboxes.get(canvas) || [];
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
 
-  const cursorX = left + progress * (right - left);
-  context.strokeStyle = "#202124";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(cursorX, 10);
-  context.lineTo(cursorX, height - 22);
-  context.stroke();
-
-  context.fillStyle = "#202124";
-  context.fillText(`${(progress * data.duration).toFixed(2)}s`, Math.min(cursorX + 6, width - 52), height - 8);
+  return hitboxes.find((hitbox) => (
+    x >= hitbox.x1
+    && x <= hitbox.x2
+    && y >= hitbox.y1
+    && y <= hitbox.y2
+  ));
 }
 
 function startCursor(name) {
@@ -1205,6 +2698,26 @@ function startLoopingCursor(name) {
   draw();
 }
 
+function nearestGameboyDutyIndex(duty) {
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+
+  GAMEBOY_DUTIES.forEach((gameboyDuty, index) => {
+    const distance = Math.abs(gameboyDuty - duty);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
+function formatDutyPercent(duty) {
+  const percent = Math.round(duty * 1000) / 10;
+  return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(1)}%`;
+}
+
 function updateWaveOutputs(kind) {
   const controls = document.querySelector(`[data-wave-controls="${kind}"]`);
   if (!controls) return;
@@ -1212,11 +2725,33 @@ function updateWaveOutputs(kind) {
   controls.querySelector('[data-wave-output="frequency"]').textContent = `${Math.round(state.frequency)} Hz`;
   controls.querySelector('[data-wave-output="volume"]').textContent = state.volume.toFixed(2);
   controls.querySelector('[data-wave-output="phase"]').textContent = `${state.phase.toFixed(2)} cycle`;
+  const dutyOutput = controls.querySelector('[data-wave-output="duty"]');
+  const dutyFineOutput = controls.querySelector('[data-wave-output="dutyFine"]');
+  const gameboyDutyOutput = controls.querySelector('[data-wave-output="gameboyDuty"]');
+
+  if (dutyOutput) dutyOutput.textContent = formatDutyPercent(state.duty);
+  if (dutyFineOutput) dutyFineOutput.textContent = formatDutyPercent(state.duty);
+
+  if (gameboyDutyOutput) {
+    const gameboyIndex = nearestGameboyDutyIndex(state.duty);
+    gameboyDutyOutput.textContent = `${gameboyIndex}: ${formatDutyPercent(GAMEBOY_DUTIES[gameboyIndex])}`;
+  }
+
+  const dutyInput = controls.querySelector('[data-wave-control="duty"]');
+  const dutyFineInput = controls.querySelector('[data-wave-control="dutyFine"]');
+  const gameboyDutyInput = controls.querySelector('[data-wave-control="gameboyDuty"]');
+  if (dutyInput) dutyInput.value = state.duty;
+  if (dutyFineInput) dutyFineInput.value = state.duty;
+  if (gameboyDutyInput) gameboyDutyInput.value = nearestGameboyDutyIndex(state.duty);
 }
 
 function updateActiveWaveAudio() {
   if (!activeWave) return;
   const state = waveRenderState[activeWave.kind];
+  if (activeWave.processor) {
+    activeWave.phase = state.phase;
+    return;
+  }
   const now = waveAudioContext.currentTime;
   activeWave.oscillator.frequency.setTargetAtTime(state.frequency, now, 0.01);
   activeWave.gain.gain.setTargetAtTime(state.volume * 0.25, now, 0.01);
@@ -1226,10 +2761,33 @@ function startWaveAudio(kind, button, status, visualName) {
   stopChapterAudio();
   waveAudioContext = waveAudioContext || new AudioContext();
   const state = waveRenderState[kind];
+
+  if (kind === "pulse") {
+    const processor = waveAudioContext.createScriptProcessor(1024, 0, 1);
+    processor.onaudioprocess = (event) => {
+      const output = event.outputBuffer.getChannelData(0);
+      let phase = activeWave ? activeWave.phase : state.phase;
+
+      for (let i = 0; i < output.length; i += 1) {
+        output[i] = (phase < state.duty ? state.volume : -state.volume) * 0.25;
+        phase = (phase + state.frequency / waveAudioContext.sampleRate) % 1;
+      }
+
+      if (activeWave) activeWave.phase = phase;
+    };
+    processor.connect(waveAudioContext.destination);
+
+    activeWave = { kind, processor, phase: state.phase, button, status };
+    button.textContent = "Stop";
+    if (status) status.textContent = "Playing live pulse. Move the sliders while it plays.";
+    startLoopingCursor(visualName);
+    return;
+  }
+
   const oscillator = waveAudioContext.createOscillator();
   const gain = waveAudioContext.createGain();
 
-  oscillator.type = kind === "triangle" ? "triangle" : "square";
+  oscillator.type = kind === "triangle" ? "triangle" : kind === "sine" ? "sine" : "square";
   oscillator.frequency.value = state.frequency;
   gain.gain.value = state.volume * 0.25;
   oscillator.connect(gain);
@@ -1248,7 +2806,16 @@ document.querySelectorAll("[data-wave-controls]").forEach((controls) => {
 
   controls.querySelectorAll("[data-wave-control]").forEach((input) => {
     input.addEventListener("input", () => {
-      waveRenderState[kind][input.dataset.waveControl] = Number(input.value);
+      const controlName = input.dataset.waveControl;
+
+      if (kind === "pulse" && controlName === "gameboyDuty") {
+        waveRenderState[kind].duty = GAMEBOY_DUTIES[Number(input.value)];
+      } else if (kind === "pulse" && controlName === "dutyFine") {
+        waveRenderState[kind].duty = Number(input.value);
+      } else {
+        waveRenderState[kind][controlName] = Number(input.value);
+      }
+
       updateWaveOutputs(kind);
       drawCompositionVisual(`${kind}-rendered`, 0);
       if (activeWave && activeWave.kind === kind) updateActiveWaveAudio();
@@ -1270,17 +2837,37 @@ document.querySelectorAll("[data-wave-play]").forEach((button) => {
 });
 
 const lfsrVisualConfigs = {
-  normal: { title: "normal / 5000 Hz / tap 1", tap: 1, interval: 360 },
-  low: { title: "lower clock / chunkier", tap: 1, interval: 720 },
-  bright: { title: "higher clock / brighter", tap: 1, interval: 170 },
+  normal: { title: "normal / hold 9 / tap 1", tap: 1, interval: 360 },
+  low: { title: "longer hold / chunkier", tap: 1, interval: 720 },
+  bright: { title: "shorter hold / brighter", tap: 1, interval: 170 },
   short: { title: "different tap / shorter pattern", tap: 6, interval: 310 },
 };
 
 const lfsrToyState = {
-  clock: 5000,
+  hold: 9,
   tap: 1,
   volume: 0.30,
   fade: 0.45,
+};
+
+const randomNoiseToyState = {
+  hold: 9,
+  volume: 0.22,
+};
+
+const fadedNoiseToyState = {
+  hold: 28,
+  volume: 0.24,
+  fade: 0.28,
+};
+
+const variedNoiseToyState = {
+  hold: 28,
+  volume: 0.24,
+  fade: 0.22,
+  holdDelta: 18,
+  fadeDelta: 0.10,
+  repeat: 0.24,
 };
 
 const continuousToyState = {
@@ -1289,12 +2876,20 @@ const continuousToyState = {
   tapA: 5,
   tapB: 17,
   drive: 2.8,
-  clock: 9000,
+  hold: 5,
   volume: 0.30,
 };
 
 const lfsrVisualState = new WeakMap();
+const randomNoiseVisualState = new WeakMap();
 const continuousVisualState = new WeakMap();
+let loadedMidi = null;
+
+function resetRandomNoiseVisuals() {
+  document.querySelectorAll("[data-random-noise-toy]").forEach((canvas) => {
+    randomNoiseVisualState.delete(canvas);
+  });
+}
 
 function lfsrStep(register, tap) {
   const feedback = (register ^ (register >> tap)) & 1;
@@ -1413,22 +3008,322 @@ function drawLfsrCanvas(canvas, config, elapsed) {
 function updateLfsrOutputs() {
   const controls = document.querySelector("[data-lfsr-controls]");
   if (!controls) return;
-  controls.querySelector('[data-lfsr-output="clock"]').textContent = `${Math.round(lfsrToyState.clock)} Hz`;
+  controls.querySelector('[data-lfsr-output="hold"]').textContent = `${Math.round(lfsrToyState.hold)} samples`;
   controls.querySelector('[data-lfsr-output="tap"]').textContent = String(lfsrToyState.tap);
   controls.querySelector('[data-lfsr-output="volume"]').textContent = lfsrToyState.volume.toFixed(2);
   controls.querySelector('[data-lfsr-output="fade"]').textContent = `${lfsrToyState.fade.toFixed(2)}s`;
 }
 
+function updateRandomNoiseOutputs() {
+  const controls = document.querySelector("[data-random-noise-controls]");
+  if (!controls) return;
+  controls.querySelector('[data-random-noise-output="hold"]').textContent = `${Math.round(randomNoiseToyState.hold)} samples`;
+  controls.querySelector('[data-random-noise-output="volume"]').textContent = randomNoiseToyState.volume.toFixed(2);
+}
+
+function updateFadedNoiseOutputs() {
+  const controls = document.querySelector("[data-faded-noise-controls]");
+  if (!controls) return;
+  controls.querySelector('[data-faded-noise-output="hold"]').textContent = `${Math.round(fadedNoiseToyState.hold)} samples`;
+  controls.querySelector('[data-faded-noise-output="volume"]').textContent = fadedNoiseToyState.volume.toFixed(2);
+  controls.querySelector('[data-faded-noise-output="fade"]').textContent = `${fadedNoiseToyState.fade.toFixed(2)}s`;
+}
+
+function updateVariedNoiseOutputs() {
+  const controls = document.querySelector("[data-varied-noise-controls]");
+  if (!controls) return;
+  controls.querySelector('[data-varied-noise-output="hold"]').textContent = `${Math.round(variedNoiseToyState.hold)} samples`;
+  controls.querySelector('[data-varied-noise-output="volume"]').textContent = variedNoiseToyState.volume.toFixed(2);
+  controls.querySelector('[data-varied-noise-output="fade"]').textContent = `${variedNoiseToyState.fade.toFixed(2)}s`;
+  controls.querySelector('[data-varied-noise-output="holdDelta"]').textContent = `+/-${Math.round(variedNoiseToyState.holdDelta)}`;
+  controls.querySelector('[data-varied-noise-output="fadeDelta"]').textContent = `+/-${variedNoiseToyState.fadeDelta.toFixed(2)}s`;
+  controls.querySelector('[data-varied-noise-output="repeat"]').textContent = `${variedNoiseToyState.repeat.toFixed(2)}s`;
+}
+
+function syncVariedNoiseInputs() {
+  const controls = document.querySelector("[data-varied-noise-controls]");
+  if (!controls) return;
+  controls.querySelector('[data-varied-noise-control="hold"]').value = variedNoiseToyState.hold;
+  controls.querySelector('[data-varied-noise-control="volume"]').value = variedNoiseToyState.volume;
+  controls.querySelector('[data-varied-noise-control="fade"]').value = variedNoiseToyState.fade;
+  controls.querySelector('[data-varied-noise-control="holdDelta"]').value = variedNoiseToyState.holdDelta;
+  controls.querySelector('[data-varied-noise-control="fadeDelta"]').value = variedNoiseToyState.fadeDelta;
+  controls.querySelector('[data-varied-noise-control="repeat"]').value = variedNoiseToyState.repeat;
+  updateVariedNoiseOutputs();
+}
+
+function drawRandomNoiseToy(canvas, elapsed) {
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.floor(width * pixelRatio);
+  canvas.height = Math.floor(height * pixelRatio);
+
+  const context = canvas.getContext("2d");
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const hold = Math.max(1, Math.round(randomNoiseToyState.hold));
+  let state = randomNoiseVisualState.get(canvas);
+  if (!state) {
+    state = { samples: [], current: Math.random() * 2 - 1, remaining: 0, lastStep: elapsed };
+  }
+
+  while (state.samples.length < 180) {
+    if (state.remaining <= 0) {
+      state.current = Math.random() * 2 - 1;
+      state.remaining = hold;
+    }
+    state.samples.push(state.current);
+    state.remaining -= 1;
+  }
+
+  while (elapsed - state.lastStep >= 32) {
+    if (state.remaining <= 0) {
+      state.current = Math.random() * 2 - 1;
+      state.remaining = hold;
+    }
+    state.samples.push(state.current);
+    if (state.samples.length > 180) state.samples.shift();
+    state.remaining -= 1;
+    state.lastStep += 32;
+  }
+  randomNoiseVisualState.set(canvas, state);
+
+  context.fillStyle = "#202124";
+  context.font = "13px SFMono-Regular, Consolas, monospace";
+  context.fillText(`random / hold ${hold} samples`, 12, 22);
+  context.fillText(`held value: ${state.current.toFixed(2)}`, 12, 42);
+
+  const left = 12;
+  const right = width - 12;
+  const laneY = height * 0.55;
+  context.strokeStyle = "#d8dde5";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(left, laneY);
+  context.lineTo(right, laneY);
+  context.stroke();
+
+  context.strokeStyle = "#f97316";
+  context.lineWidth = 2;
+  context.beginPath();
+  state.samples.forEach((sample, index) => {
+    const x = left + (index / 179) * (right - left);
+    const y = laneY - sample * randomNoiseToyState.volume * 140;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.stroke();
+
+  context.fillStyle = "#202124";
+  context.fillText("each horizontal run is the exact same sample value reused", 12, height - 14);
+}
+
+function drawFadedNoiseToy(canvas) {
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.floor(width * pixelRatio);
+  canvas.height = Math.floor(height * pixelRatio);
+
+  const context = canvas.getContext("2d");
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+
+  const hold = Math.max(1, Math.round(fadedNoiseToyState.hold));
+  const previewCount = 180;
+  let current = 0.74;
+  let remaining = 0;
+  const samples = [];
+
+  for (let i = 0; i < previewCount; i += 1) {
+    if (remaining <= 0) {
+      current = Math.sin((i + hold) * 12.9898) * 0.8;
+      remaining = hold;
+    }
+    const fade = Math.max(0, 1 - i / previewCount);
+    samples.push(current * fadedNoiseToyState.volume * fade);
+    remaining -= 1;
+  }
+
+  context.fillStyle = "#202124";
+  context.font = "13px SFMono-Regular, Consolas, monospace";
+  context.fillText(`hold ${hold} samples / fade ${fadedNoiseToyState.fade.toFixed(2)}s`, 12, 22);
+
+  const left = 12;
+  const right = width - 12;
+  const laneY = height * 0.55;
+  context.strokeStyle = "#d8dde5";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(left, laneY);
+  context.lineTo(right, laneY);
+  context.stroke();
+
+  context.strokeStyle = "#e6468a";
+  context.lineWidth = 2;
+  context.beginPath();
+  samples.forEach((sample, index) => {
+    const x = left + (index / (previewCount - 1)) * (right - left);
+    const y = laneY - sample * 260;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  });
+  context.stroke();
+
+  context.fillStyle = "#202124";
+  context.fillText("same held noise, multiplied by a volume that falls over time", 12, height - 14);
+}
+
+function updateWavetableToyOutputs() {
+  const controls = document.querySelector("[data-wavetable-controls]");
+  if (!controls) return;
+  controls.querySelector('[data-wavetable-output="frequency"]').textContent = `${Math.round(wavetableToyState.frequency)} Hz`;
+  controls.querySelector('[data-wavetable-output="volume"]').textContent = wavetableToyState.volume.toFixed(2);
+}
+
+function drawWavetableToy(canvas) {
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = Math.floor(width * pixelRatio);
+  canvas.height = Math.floor(height * pixelRatio);
+
+  const context = canvas.getContext("2d");
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.font = "13px SFMono-Regular, Consolas, monospace";
+
+  const left = 22;
+  const right = width - 22;
+  const tableTop = 42;
+  const tableHeight = Math.max(120, height * 0.42);
+  const tableCenter = tableTop + tableHeight * 0.5;
+  const barWidth = (right - left) / wavetableToyState.table.length;
+
+  context.fillStyle = "#202124";
+  context.fillText("32 offsets stored in the table", left, 22);
+
+  context.strokeStyle = "#d8dde5";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(left, tableCenter);
+  context.lineTo(right, tableCenter);
+  context.stroke();
+
+  wavetableToyState.table.forEach((value, index) => {
+    const x = left + index * barWidth;
+    const y = tableCenter - value * tableHeight * 0.46;
+    context.fillStyle = value >= 0 ? "#c8e95a" : "#f8b9d2";
+    context.fillRect(x + 1, Math.min(tableCenter, y), Math.max(2, barWidth - 2), Math.abs(tableCenter - y));
+    context.strokeStyle = "#202124";
+    context.strokeRect(x + 1, Math.min(tableCenter, y), Math.max(2, barWidth - 2), Math.abs(tableCenter - y) || 2);
+  });
+
+  const waveTop = tableTop + tableHeight + 54;
+  const waveCenter = waveTop + 72;
+  const visualRate = 900;
+  const frequency = Math.max(3, wavetableToyState.frequency / 32);
+  const count = Math.floor((width - 44) * 1.2);
+
+  context.fillStyle = "#202124";
+  context.fillText("then we scan around that table over and over", left, waveTop - 18);
+  context.strokeStyle = "#d8dde5";
+  context.beginPath();
+  context.moveTo(left, waveCenter);
+  context.lineTo(right, waveCenter);
+  context.stroke();
+
+  context.strokeStyle = "#6d4bd4";
+  context.lineWidth = 2;
+  context.beginPath();
+  for (let i = 0; i < count; i += 1) {
+    const x = left + (i / (count - 1)) * (right - left);
+    const value = wavetableVisualSample(i, frequency, wavetableToyState.table, visualRate);
+    const y = waveCenter - value * 62 * wavetableToyState.volume * 3.2;
+    if (i === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  context.stroke();
+}
+
+function redrawWavetableToy() {
+  updateWavetableToyOutputs();
+  document.querySelectorAll("[data-wavetable-toy]").forEach((canvas) => drawWavetableToy(canvas));
+  drawCompositionVisual("wavetable-toy-rendered", currentCompositionProgress("wavetable-toy-rendered"));
+}
+
+function setWavetableBarFromPointer(canvas, event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const left = 22;
+  const right = rect.width - 22;
+  const tableTop = 42;
+  const tableHeight = Math.max(120, rect.height * 0.42);
+  const index = Math.max(0, Math.min(31, Math.floor(((x - left) / Math.max(1, right - left)) * 32)));
+  const value = Math.max(-1, Math.min(1, 1 - ((y - tableTop) / tableHeight) * 2));
+  wavetableToyState.table[index] = value;
+  redrawWavetableToy();
+}
+
+function setupWavetableToy() {
+  document.querySelectorAll("[data-wavetable-controls]").forEach((controls) => {
+    controls.querySelectorAll("[data-wavetable-control]").forEach((input) => {
+      input.addEventListener("input", () => {
+        wavetableToyState[input.dataset.wavetableControl] = Number(input.value);
+        redrawWavetableToy();
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-wavetable-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      wavetableToyState.table = wavetableFromPreset(button.dataset.wavetablePreset);
+      redrawWavetableToy();
+    });
+  });
+
+  document.querySelectorAll("[data-wavetable-toy]").forEach((canvas) => {
+    let dragging = false;
+    canvas.addEventListener("pointerdown", (event) => {
+      dragging = true;
+      canvas.setPointerCapture(event.pointerId);
+      setWavetableBarFromPointer(canvas, event);
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (dragging) setWavetableBarFromPointer(canvas, event);
+    });
+    canvas.addEventListener("pointerup", () => {
+      dragging = false;
+    });
+    canvas.addEventListener("pointercancel", () => {
+      dragging = false;
+    });
+  });
+
+  redrawWavetableToy();
+}
+
 function drawAllLfsrVisuals(timestamp) {
+  document.querySelectorAll("[data-random-noise-toy]").forEach((canvas) => {
+    drawRandomNoiseToy(canvas, timestamp);
+  });
+
+  document.querySelectorAll("[data-faded-noise-toy]").forEach((canvas) => {
+    drawFadedNoiseToy(canvas);
+  });
+
   document.querySelectorAll("[data-lfsr-visual]").forEach((canvas) => {
     drawLfsrCanvas(canvas, lfsrVisualConfigs[canvas.dataset.lfsrVisual], timestamp);
   });
 
   document.querySelectorAll("[data-lfsr-toy]").forEach((canvas) => {
     drawLfsrCanvas(canvas, {
-      title: `toy / ${Math.round(lfsrToyState.clock)} Hz / tap ${lfsrToyState.tap}`,
+      title: `toy / hold ${Math.round(lfsrToyState.hold)} / tap ${lfsrToyState.tap}`,
       tap: lfsrToyState.tap,
-      interval: Math.max(90, 9000 / lfsrToyState.clock * 500),
+      interval: Math.max(90, lfsrToyState.hold * 55),
     }, timestamp);
   });
 
@@ -1457,7 +3352,7 @@ function drawContinuousCanvas(canvas, elapsed) {
     tapA: continuousToyState.tapA,
     tapB: continuousToyState.tapB,
     drive: continuousToyState.drive,
-    clock: continuousToyState.clock,
+    hold: continuousToyState.hold,
   });
 
   if (!state || state.signature !== signature) {
@@ -1469,7 +3364,7 @@ function drawContinuousCanvas(canvas, elapsed) {
     };
   }
 
-  const interval = Math.max(60, 9000 / continuousToyState.clock * 420);
+  const interval = Math.max(60, continuousToyState.hold * 45);
   while (elapsed - state.lastStep >= interval) {
     const values = state.values;
     const a = values[values.length - 1];
@@ -1540,7 +3435,7 @@ function updateContinuousOutputs() {
   controls.querySelector('[data-continuous-output="tapA"]').textContent = String(continuousToyState.tapA);
   controls.querySelector('[data-continuous-output="tapB"]').textContent = String(continuousToyState.tapB);
   controls.querySelector('[data-continuous-output="drive"]').textContent = continuousToyState.drive.toFixed(2);
-  controls.querySelector('[data-continuous-output="clock"]').textContent = `${Math.round(continuousToyState.clock)} Hz`;
+  controls.querySelector('[data-continuous-output="hold"]').textContent = `${Math.round(continuousToyState.hold)} samples`;
   controls.querySelector('[data-continuous-output="volume"]').textContent = continuousToyState.volume.toFixed(2);
 }
 
@@ -1549,12 +3444,143 @@ document.querySelectorAll("[data-lfsr-controls]").forEach((controls) => {
   controls.querySelectorAll("[data-lfsr-control]").forEach((input) => {
     input.addEventListener("input", () => {
       const value = Number(input.value);
-      if (input.dataset.lfsrControl === "clock") lfsrToyState.clock = value;
+      if (input.dataset.lfsrControl === "hold") lfsrToyState.hold = value;
       if (input.dataset.lfsrControl === "tap") lfsrToyState.tap = value;
       if (input.dataset.lfsrControl === "volume") lfsrToyState.volume = value;
       if (input.dataset.lfsrControl === "fade") lfsrToyState.fade = value;
       updateLfsrOutputs();
     });
+  });
+});
+
+document.querySelectorAll("[data-random-noise-controls]").forEach((controls) => {
+  updateRandomNoiseOutputs();
+  controls.querySelectorAll("[data-random-noise-control]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const value = Number(input.value);
+      if (input.dataset.randomNoiseControl === "hold") {
+        randomNoiseToyState.hold = value;
+        resetRandomNoiseVisuals();
+      }
+      if (input.dataset.randomNoiseControl === "volume") randomNoiseToyState.volume = value;
+      updateRandomNoiseOutputs();
+    });
+  });
+});
+
+document.querySelectorAll("[data-faded-noise-controls]").forEach((controls) => {
+  updateFadedNoiseOutputs();
+  controls.querySelectorAll("[data-faded-noise-control]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const value = Number(input.value);
+      if (input.dataset.fadedNoiseControl === "hold") fadedNoiseToyState.hold = value;
+      if (input.dataset.fadedNoiseControl === "volume") fadedNoiseToyState.volume = value;
+      if (input.dataset.fadedNoiseControl === "fade") fadedNoiseToyState.fade = value;
+      updateFadedNoiseOutputs();
+    });
+  });
+});
+
+document.querySelectorAll("[data-varied-noise-controls]").forEach((controls) => {
+  updateVariedNoiseOutputs();
+  controls.querySelectorAll("[data-varied-noise-control]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const value = Number(input.value);
+      if (input.dataset.variedNoiseControl === "hold") variedNoiseToyState.hold = value;
+      if (input.dataset.variedNoiseControl === "volume") variedNoiseToyState.volume = value;
+      if (input.dataset.variedNoiseControl === "fade") variedNoiseToyState.fade = value;
+      if (input.dataset.variedNoiseControl === "holdDelta") variedNoiseToyState.holdDelta = value;
+      if (input.dataset.variedNoiseControl === "fadeDelta") variedNoiseToyState.fadeDelta = value;
+      if (input.dataset.variedNoiseControl === "repeat") {
+        variedNoiseToyState.repeat = value;
+        if (variedNoiseLoop) {
+          const button = document.querySelector("[data-varied-noise-play]");
+          stopVariedNoiseLoop();
+          if (button) startVariedNoiseLoop(button);
+        }
+      }
+      updateVariedNoiseOutputs();
+    });
+  });
+});
+
+document.querySelectorAll("[data-varied-noise-preset]").forEach((button) => {
+  button.addEventListener("click", () => {
+    variedNoiseToyState.hold = Number(button.dataset.hold);
+    variedNoiseToyState.volume = Number(button.dataset.volume);
+    variedNoiseToyState.fade = Number(button.dataset.fade);
+    variedNoiseToyState.holdDelta = Number(button.dataset.holdDelta);
+    variedNoiseToyState.fadeDelta = Number(button.dataset.fadeDelta);
+    variedNoiseToyState.repeat = Number(button.dataset.repeat);
+    syncVariedNoiseInputs();
+
+    const playButton = document.querySelector("[data-varied-noise-play]");
+    if (variedNoiseLoop) {
+      stopVariedNoiseLoop();
+    }
+    if (playButton) startVariedNoiseLoop(playButton);
+  });
+});
+
+document.querySelectorAll("[data-midi-file]").forEach((input) => {
+  input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    const summary = document.querySelector("[data-midi-summary]");
+    const channelList = document.querySelector("[data-midi-channels]");
+    const playButton = document.querySelector("[data-midi-play]");
+    if (!file || !summary || !channelList || !playButton) return;
+
+    try {
+      loadedMidi = parseMidi(await file.arrayBuffer());
+      const groups = new Map();
+      for (const note of loadedMidi.notes) {
+        const id = midiGroupId(note);
+        if (!groups.has(id)) groups.set(id, {
+          id,
+          trackIndex: note.trackIndex,
+          channel: note.channel,
+          count: 0,
+        });
+        groups.get(id).count += 1;
+      }
+
+      summary.textContent = `${file.name}: ${loadedMidi.notes.length} notes, ${groups.size} track/channel groups. Preview is capped at 32 seconds.`;
+      channelList.innerHTML = "";
+      for (const group of groups.values()) {
+        const label = document.createElement("label");
+        const text = document.createElement("span");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+        checkbox.dataset.midiGroup = group.id;
+        text.textContent = midiGroupLabel(group, loadedMidi.trackNames);
+        label.append(text, checkbox);
+        channelList.append(label);
+      }
+      playButton.disabled = loadedMidi.notes.length === 0;
+    } catch (error) {
+      loadedMidi = null;
+      summary.textContent = `Could not read MIDI: ${error.message}`;
+      channelList.innerHTML = "";
+      playButton.disabled = true;
+    }
+  });
+});
+
+document.querySelectorAll("[data-midi-play]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    if (chapterAudio && button.textContent === "Stop") {
+      stopChapterAudio();
+      return;
+    }
+    if (!loadedMidi) return;
+    const enabledGroups = new Set(
+      Array.from(document.querySelectorAll("[data-midi-group]"))
+        .filter((checkbox) => checkbox.checked)
+        .map((checkbox) => checkbox.dataset.midiGroup),
+    );
+    playSamples(renderMidiPreview(loadedMidi, enabledGroups), button, null, null);
   });
 });
 
@@ -1566,10 +3592,53 @@ document.querySelectorAll("[data-lfsr-play]").forEach((button) => {
       return;
     }
     playSamples(lfsrNoise(0.9, lfsrToyState.volume, {
-      clockHz: lfsrToyState.clock,
+      holdSamples: lfsrToyState.hold,
       tap: lfsrToyState.tap,
       fadeSeconds: lfsrToyState.fade,
     }), button, null, null);
+  });
+});
+
+document.querySelectorAll("[data-random-noise-play]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    toggleLiveRandomNoise(button);
+  });
+});
+
+document.querySelectorAll("[data-noise-piano-note]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    const frequency = noteFrequency(button.dataset.noisePianoNote);
+    const holdSamples = Math.max(1, Math.round(CHAPTER_SAMPLE_RATE / frequency));
+    playSamples(heldRandomNoise({
+      seconds: 0.55,
+      volume: 0.20,
+      holdSamples,
+    }), null, null, null);
+  });
+});
+
+document.querySelectorAll("[data-faded-noise-play]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    if (chapterAudio && button.textContent === "Stop") {
+      stopChapterAudio();
+      return;
+    }
+    playSamples(heldRandomNoise({
+      seconds: Math.max(0.12, fadedNoiseToyState.fade),
+      volume: fadedNoiseToyState.volume,
+      holdSamples: fadedNoiseToyState.hold,
+      fadeSeconds: fadedNoiseToyState.fade,
+    }), button, null, null);
+  });
+});
+
+document.querySelectorAll("[data-varied-noise-play]").forEach((button) => {
+  button.dataset.label = button.textContent;
+  button.addEventListener("click", () => {
+    startVariedNoiseLoop(button);
   });
 });
 
@@ -1585,7 +3654,7 @@ document.querySelectorAll("[data-feedback-play]").forEach((button) => {
       length: Number(button.dataset.length),
       tapA: Number(button.dataset.tapA),
       tapB: Number(button.dataset.tapB),
-      clockHz: Number(button.dataset.clock),
+      holdSamples: Number(button.dataset.hold),
     }), button, null, null);
   });
 });
@@ -1617,18 +3686,48 @@ document.querySelectorAll("[data-continuous-play]").forEach((button) => {
       tapA: continuousToyState.tapA,
       tapB: continuousToyState.tapB,
       drive: continuousToyState.drive,
-      clockHz: continuousToyState.clock,
+      holdSamples: continuousToyState.hold,
       volume: continuousToyState.volume,
     }), button, null, null);
   });
 });
 
-if (document.querySelector("[data-lfsr-visual], [data-lfsr-toy], [data-continuous-toy]")) {
+if (document.querySelector("[data-wavetable-toy]")) {
+  setupWavetableToy();
+}
+
+if (document.querySelector("[data-random-noise-toy], [data-faded-noise-toy], [data-lfsr-visual], [data-lfsr-toy], [data-continuous-toy]")) {
   requestAnimationFrame(drawAllLfsrVisuals);
 }
 
 document.querySelectorAll("[data-composition-visual]").forEach((canvas) => {
   drawCompositionVisual(canvas.dataset.compositionVisual, 0);
+});
+
+document.querySelectorAll("[data-route3-event]").forEach((element) => {
+  element.addEventListener("mouseenter", () => setRoute3Hover(element.dataset.route3Event));
+  element.addEventListener("focus", () => setRoute3Hover(element.dataset.route3Event));
+  element.addEventListener("click", (event) => {
+    event.preventDefault();
+    setRoute3Hover(element.dataset.route3Event);
+    playRoute3Event(element.dataset.route3Event);
+  });
+  element.addEventListener("mouseleave", () => setRoute3Hover(null));
+  element.addEventListener("blur", () => setRoute3Hover(null));
+});
+
+document.querySelectorAll('[data-composition-visual="route3-sketch-channels"], [data-composition-visual="route3-full-channels"]').forEach((canvas) => {
+  canvas.addEventListener("mousemove", (event) => {
+    const hitbox = route3HitboxAt(canvas, event.clientX, event.clientY);
+    setRoute3Hover(hitbox ? hitbox.id : null, hitbox ? hitbox.start + Math.min(hitbox.duration * 0.5, 0.04) : null);
+  });
+  canvas.addEventListener("click", (event) => {
+    const hitbox = route3HitboxAt(canvas, event.clientX, event.clientY);
+    if (!hitbox) return;
+    setRoute3Hover(hitbox.id, hitbox.start + Math.min(hitbox.duration * 0.5, 0.04));
+    playRoute3Event(hitbox.id);
+  });
+  canvas.addEventListener("mouseleave", () => setRoute3Hover(null));
 });
 
 window.addEventListener("resize", () => {

@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bonus: Real Game Boy Noise: LFSR - Game Boy Audio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <a class="site-title" href="index.html">How to code GameBoy music.</a>
+      <section class="intro intro-title-only">
+        <div>
+          <h1>Bonus: Real Game Boy noise: LFSR.</h1>
+        </div>
+      </section>
+
+      <section class="chapter">
+        <section class="chapter-panel">
+          <p>
+            The random float noise from the noise chapter is already enough to make good
+            effects. This chapter is the more Game Boyish version. The real noise channel
+            does not ask for <code>random.uniform(-1, 1)</code>. It uses a tiny bit machine.
+          </p>
+          <p>
+            The bit machine is called an LFSR. That stands for linear feedback shift
+            register. Gross name. It just means we keep one integer around, pull some bits
+            out of it, combine them, shift the integer over, and feed the new bit back in.
+            That gives us a long stream of high/low offsets that feels noisy.
+          </p>
+          <p>
+            Before we do the compact bit math version, here is the same idea as a literal list
+            of <code>True</code> and <code>False</code> values. It is easier to read because
+            you can see the slots move.
+          </p>
+          <pre><code class="language-python">register = [
+    True, True, True, True,
+    True, True, True, True,
+]
+
+tap = 3
+
+# Read two slots.
+right_bit = register[-1]
+tap_bit = register[-1 - tap]
+
+# XOR means "different".
+# True  xor True  -> False
+# True  xor False -> True
+# False xor True  -> True
+# False xor False -> False
+new_bit = right_bit != tap_bit
+
+# Pop the right side off.
+register.pop()
+
+# Push the new feedback bit onto the left side.
+register.insert(0, new_bit)
+
+# The new rightmost bit is the high/low speaker offset.
+if register[-1]:
+    sample = -1
+else:
+    sample = 1</code></pre>
+          <p>One tick looks like this.</p>
+          <pre><code class="language-python"># before
+[True, True, True, True, True, True, True, True]
+
+# tap 3 compares these two:
+#                          right_bit
+#              tap_bit     |
+#              |           |
+[True, True, True, True, True, True, True, True]
+
+new_bit = True != True  # False
+
+# shift right, insert False on the left
+[False, True, True, True, True, True, True, True]</code></pre>
+          <p>
+            Python lists are readable, but computers can pack the same list of booleans into
+            one integer. Then shifting the list becomes shifting bits.
+          </p>
+          <pre><code class="language-python"># list version
+right_bit = register[-1]
+tap_bit = register[-1 - tap]
+new_bit = right_bit != tap_bit
+register.pop()
+register.insert(0, new_bit)
+
+# bitwise version
+right_bit = lfsr & 1
+tap_bit = (lfsr >> tap) & 1
+new_bit = right_bit ^ tap_bit
+lfsr = (lfsr >> 1) | (new_bit << 14)</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            The useful knobs are hold, feedback tap, and the volume shape.
+            Hold changes how many samples reuse one noise bit. Feedback tap changes the
+            pattern of bits. Volume shape decides whether it is a constant hiss or a little
+            hit that dies away.
+          </p>
+          <pre><code class="language-python">sample_rate = 44100
+seconds = 0.8
+volume = 0.30
+num_samples = int(seconds * sample_rate)
+
+samples = []
+
+current_offset = 1
+hold_samples = 9
+feedback_tap = 1
+lfsr = 0b111_1111_1111_1111
+
+for sample_index in range(num_samples):
+    # Audio samples still happen 44,100 times per second,
+    # but the noise bit only changes every 9 samples.
+    # Smaller hold = brighter fizz.
+    # Bigger hold = rougher chunk.
+    if sample_index % hold_samples == 0:
+        # Take two bits from the register.
+        # XOR them together.
+        # That result becomes the new incoming bit.
+        bit = (lfsr ^ (lfsr >> feedback_tap)) & 1
+
+        # Shift everything one slot to the right,
+        # then put the new bit back on the left.
+        lfsr = (lfsr >> 1) | (bit << 14)
+
+        # The bottom bit becomes our speaker offset.
+        current_offset = -1 if lfsr & 1 else 1
+
+    # Constant noise is just hiss.
+    # Fade it down and now it starts acting like a tiny drum hit.
+    time = sample_index / sample_rate
+    fade = max(0, 1 - time / 0.45)
+
+    sample = current_offset * volume * fade
+    samples.append(sample)</code></pre>
+          <div class="code-actions">
+            <button data-play="noise" data-status="#noiseStatus">Play Bit Machine Noise</button>
+            <button data-play="noise-low" data-status="#noiseStatus">Longer Hold</button>
+            <button data-play="noise-bright" data-status="#noiseStatus">Shorter Hold</button>
+            <button data-play="noise-short" data-status="#noiseStatus">Different Tap</button>
+            <button data-play="noise-click" data-status="#noiseStatus">Tiny Click</button>
+          </div>
+          <p id="noiseStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            Heres the bit machine actually doing the thing. The line picks two bit slots,
+            XORs them into a new bit, the register shifts right, and the bottom bit becomes
+            the next high/low sample.
+          </p>
+          <div class="lfsr-demo-grid">
+            <article>
+              <canvas data-lfsr-visual="normal" aria-label="Normal LFSR noise animation"></canvas>
+              <div class="code-actions">
+                <button data-play="noise" data-status="#noiseVariantStatus">Play Normal</button>
+              </div>
+            </article>
+            <article>
+              <canvas data-lfsr-visual="low" aria-label="Longer hold LFSR noise animation"></canvas>
+              <div class="code-actions">
+                <button data-play="noise-low" data-status="#noiseVariantStatus">Play Longer Hold</button>
+              </div>
+            </article>
+            <article>
+              <canvas data-lfsr-visual="bright" aria-label="Shorter hold LFSR noise animation"></canvas>
+              <div class="code-actions">
+                <button data-play="noise-bright" data-status="#noiseVariantStatus">Play Shorter Hold</button>
+              </div>
+            </article>
+            <article>
+              <canvas data-lfsr-visual="short" aria-label="Different tap LFSR noise animation"></canvas>
+              <div class="code-actions">
+                <button data-play="noise-short" data-status="#noiseVariantStatus">Play Different Tap</button>
+              </div>
+            </article>
+          </div>
+          <p id="noiseVariantStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <div class="wave-shape-toy lfsr-toy">
+            <div class="toy-badge" aria-hidden="true">
+              <span>GAY BOY</span>
+            </div>
+            <div class="wave-shape-toy-body">
+              <figure class="sample-diagram">
+                <canvas data-lfsr-toy aria-label="LFSR noise toy"></canvas>
+                <figcaption>Move the knobs. The register animation changes, and the generated noise changes with it.</figcaption>
+              </figure>
+              <div class="wave-controls" data-lfsr-controls>
+                <label>
+                  Hold
+                  <output data-lfsr-output="hold">9 samples</output>
+                  <input type="range" min="1" max="128" step="1" value="9" data-lfsr-control="hold" />
+                </label>
+                <label>
+                  Tap
+                  <output data-lfsr-output="tap">1</output>
+                  <input type="range" min="1" max="7" step="1" value="1" data-lfsr-control="tap" />
+                </label>
+                <label>
+                  Volume
+                  <output data-lfsr-output="volume">0.30</output>
+                  <input type="range" min="0.05" max="0.55" step="0.01" value="0.30" data-lfsr-control="volume" />
+                </label>
+                <label>
+                  Fade
+                  <output data-lfsr-output="fade">0.45s</output>
+                  <input type="range" min="0.05" max="1.00" step="0.01" value="0.45" data-lfsr-control="fade" />
+                </label>
+              </div>
+              <div class="code-actions">
+                <button data-lfsr-play>Play Toy Noise</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            Thats basically the point of the Game Boy noise channel. Channel 4 does not play
+            normal melody notes like the pulse channels. It advances this little LFSR thing and
+            turns the bit stream into high/low offsets. The hold-ish settings are the character
+            knobs. Not magic. Just tunable trash.
+          </p>
+          <p>
+            The real Game Boy exposes those knobs through its noise registers. You do not send
+            it a huge list of random samples. You set parameters like timer rate, width mode,
+            and envelope, and the chip spits out the noisy high/low stream for you.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            But in software we are not stuck with the Game Boy circuit. XOR is special because
+            it tends to make long useful bit patterns. But you can put other little logic
+            functions in the feedback path and listen to the machine get weird, collapse,
+            buzz, or turn into a different texture.
+          </p>
+          <pre><code class="language-python">def feedback(mode, a, b, c):
+    if mode == "xor":
+        return a ^ b
+    if mode == "nand":
+        return 1 - (a & b)
+    if mode == "xor_or":
+        return (a ^ b) | c
+    if mode == "majority":
+        return 1 if a + b + c >= 2 else 0
+    if mode == "parity3":
+        return a ^ b ^ c
+
+
+new_bit = feedback(mode, bit_0, bit_tap_a, bit_tap_b)
+register = (register >> 1) | (new_bit << (length - 1))</code></pre>
+          <div class="noise-preset-list">
+            <button data-feedback-play data-mode="xor" data-length="15" data-tap-a="1" data-tap-b="6" data-hold="9">xor / 15 / taps 1,6 / hold 9</button>
+            <button data-feedback-play data-mode="nand" data-length="15" data-tap-a="1" data-tap-b="6" data-hold="9">nand / 15 / taps 1,6 / hold 9</button>
+            <button data-feedback-play data-mode="xor_or" data-length="15" data-tap-a="2" data-tap-b="9" data-hold="7">xor_or / 15 / taps 2,9 / hold 7</button>
+            <button data-feedback-play data-mode="majority" data-length="15" data-tap-a="3" data-tap-b="8" data-hold="12">majority / 15 / taps 3,8 / hold 12</button>
+            <button data-feedback-play data-mode="parity3" data-length="23" data-tap-a="5" data-tap-b="17" data-hold="5">parity3 / 23 / taps 5,17 / hold 5</button>
+          </div>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            Then theres the other chain of thought. What if the register is not bits. What if
+            it is a row of smooth numbers, and the feedback function is something soft like
+            <code>tanh</code>, <code>sin</code>, or a folded curve. Now it is not a Game Boy
+            noise channel anymore. Its a little procedural noise synth.
+          </p>
+          <pre><code class="language-python">def soft_xor(a, b, c, drive):
+    return tanh((a - b) * drive)
+
+
+def sine_mix(a, b, c, drive):
+    return sin(a * drive + b * drive * 0.7 + c * drive * 0.35)
+
+
+new_value = feedback(a, b, c, drive)
+state = [new_value] + state[:-1]
+sample = state[-1]</code></pre>
+          <div class="wave-shape-toy lfsr-toy">
+            <div class="toy-badge" aria-hidden="true">
+              <span>GAY BOY</span>
+            </div>
+            <div class="wave-shape-toy-body">
+              <figure class="sample-diagram">
+                <canvas data-continuous-toy aria-label="Continuous shift register toy"></canvas>
+                <figcaption>Same shift-register idea, but every slot holds a smooth number instead of one bit.</figcaption>
+              </figure>
+              <div class="wave-controls continuous-controls" data-continuous-controls>
+                <label>
+                  Function
+                  <output data-continuous-output="mode">soft_xor</output>
+                  <select data-continuous-control="mode">
+                    <option value="soft_xor">soft_xor</option>
+                    <option value="soft_and">soft_and</option>
+                    <option value="soft_or">soft_or</option>
+                    <option value="sine_mix">sine_mix</option>
+                    <option value="fold">fold</option>
+                    <option value="logistic">logistic</option>
+                  </select>
+                </label>
+                <label>
+                  Length
+                  <output data-continuous-output="length">32</output>
+                  <input type="range" min="8" max="64" step="1" value="32" data-continuous-control="length" />
+                </label>
+                <label>
+                  Tap A
+                  <output data-continuous-output="tapA">5</output>
+                  <input type="range" min="1" max="31" step="1" value="5" data-continuous-control="tapA" />
+                </label>
+                <label>
+                  Tap B
+                  <output data-continuous-output="tapB">17</output>
+                  <input type="range" min="1" max="31" step="1" value="17" data-continuous-control="tapB" />
+                </label>
+                <label>
+                  Drive
+                  <output data-continuous-output="drive">2.80</output>
+                  <input type="range" min="0.20" max="8.00" step="0.05" value="2.80" data-continuous-control="drive" />
+                </label>
+                <label>
+                  Hold
+                  <output data-continuous-output="hold">5 samples</output>
+                  <input type="range" min="1" max="96" step="1" value="5" data-continuous-control="hold" />
+                </label>
+                <label>
+                  Volume
+                  <output data-continuous-output="volume">0.30</output>
+                  <input type="range" min="0.05" max="0.70" step="0.01" value="0.30" data-continuous-control="volume" />
+                </label>
+              </div>
+              <div class="code-actions">
+                <button data-continuous-play>Play Continuous Noise</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="next-links">
+        <a href="index.html">Back to index</a>
+        <a href="04-noise.html">Back to Noise</a>
+        <a href="bonus-wavetable.html">Bonus: Wavetable</a>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="chapter-player.js"></script>
+  </body>
+</html>

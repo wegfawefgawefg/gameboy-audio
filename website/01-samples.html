@@ -187,8 +187,9 @@
         <h2>The Code</h2>
         <p>
           A square wave is just the speaker jumping between two offsets.
-          High, low, high, low. Thats it. but like, high for a bit, then low for a bit. The frequency determines how many highs then how many lows in a row. 
-          You can type the waveform manually. behold:
+          Its called a square wave cuz its got corners like a square, but its actually more of a rectangle wave. 
+          Anyways the frequency determines how many highs then how many lows in a row. 
+          You can type the waveform manually like a monkey. behold:
         </p>
 
         <div class="code-stack">
@@ -206,7 +207,7 @@ play(list_of_membrane_offsets)</code></pre>
 
           <article>
             <p>
-              alright stop typing asshole, lets make the list procedurally, thats why ur here.
+              My fingers hurt. Lets generate the samples procedurally.
             </p>
             <pre><code class="language-python">sample_rate = 44100
 frequency = 220
@@ -317,7 +318,7 @@ for sample_index in range(num_samples):
         </div>
 
         <p>
-          We dont need to code all that shit, or need to, just import your library and call the function.
+          We dont need to code all that shit, nor want to, just import your library and call the function.
           Heres what that might look like.
         </p>
 
@@ -446,14 +447,15 @@ try device.drain();</code></pre>
         </div>
 
         <p>
-          Everything about the nature of our sound is just procedurally defining the list
-          of numbers. And ur gonna do that in the <a href="02-wave-shapes.html">next chapter</a>.
+          Every sound you ever heard on a computer was just a stupid ass list of numbers. 
+          But like, different numbers in different orders man. (Fuck you)
+          Alright lets go procedurally generate some different flavors in the next chapter.
         </p>
       </section>
 
       <section class="next-links">
         <a href="index.html">Back to index</a>
-        <a href="02-wave-shapes.html">Next: Wave Shapes</a>
+        <a href="02-wave-shapes.html">Next: Shaping our samples</a>
       </section>
     </main>
 

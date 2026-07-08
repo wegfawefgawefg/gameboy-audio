@@ -12,26 +12,48 @@
       <a class="site-title" href="index.html">How to code GameBoy music.</a>
       <section class="intro intro-title-only">
         <div>
-          <h1>Noise is a stream of rough high/low offsets.</h1>
+          <h1>Noise.</h1>
         </div>
       </section>
 
       <section class="chapter">
         <section class="chapter-panel">
           <p>
-            Alright so if you stick to two sequences of notes stacked on top of eachother,
-            each using one voice, where one is a square wave and the other can be square or
-            pulse, youre in real Game Boy territory. But what about drums and stuff. Well
-            thats where noise comes in.
+            Alright so if you stick to two sequences of square wave notes on top of eachother youre in real Game Boy territory.
+            But youre missing part of your artistic sound palette (town). The drums.
           </p>
           <p>
-            Noise is just messy speaker offsets. Instead of drawing a clean repeating square
-            wave, we keep throwing random-looking numbers into the sample list.
+            People hear "noise" and think "bad sound", but old game music uses noise for
+            percussion all the time. Snare hits, hi-hats, little footstep ticks, explosions,
+            wind, surf, impact sounds.
           </p>
+
+          <p>
+            Listen to the Route 3 theme from Pokemon Red/Blue/Gweeen. You can hear two pulse channels, and then underneath that theres a fuzzy
+            pixelated snare drum. We can't make that sound with the square, triangle, sin, or pulse waves. We need a noise voice. 
+          </p>
+          <div class="route-reference-images" aria-label="Route 3 visual reference">
+            <img src="assets/route-3-map.png" alt="Route 3 map from Pokemon Red and Blue">
+            <img src="assets/route-3-screenshot.jpg" alt="Pokemon Red and Blue Route 3 screenshot">
+          </div>
+          <div class="reference-audio">
+            <audio data-reference-player controls src="local-media/r3.mp3"></audio>
+          </div>
+          <p class="audio-followup">
+            Here is that same recording filtered so the noise-based snare voice stands out.
+            It is not perfectly isolated, but it pushes the square-wave voices back enough
+            that you can focus on the fuzzy hits.
+          </p>
+          <div class="reference-audio">
+            <audio controls src="local-media/r3-analysis/r3_hpss_noise_aggressive.wav"></audio>
+          </div>
         </section>
 
         <section class="chapter-panel">
-          <p>Random can be a voice too lol.</p>
+          <p>
+            A noise voice is just less orderly samples. Instead of drawing a clean repeating square
+            wave, we dump random numbers into the sample list.
+          </p>
           <pre><code class="language-python">import random
 
 sample_rate = 44100
@@ -45,292 +67,353 @@ for sample_index in range(num_samples):
     random_offset = random.uniform(-1, 1)
     sample = random_offset * volume
     samples.append(sample)</code></pre>
+          <p>That spits out a big list of offsets like this.</p>
+          <pre><code class="language-python">[
+    0.07, -0.13, 0.16, 0.02, -0.17, 0.11, -0.04, -0.09,
+    0.18, 0.05, -0.15, 0.10, -0.01, -0.18, 0.14, -0.06,
+    0.03, 0.17, -0.12, -0.08, 0.01, -0.16, 0.09, 0.12,
+    ...
+]</code></pre>
           <div class="code-actions">
             <button data-play="random-noise" data-status="#randomNoiseStatus">Play Random Noise</button>
           </div>
           <p id="randomNoiseStatus" class="status-line" aria-live="polite"></p>
-        </section>
+          <p>
+            See thats already pretty good, but it doesnt sound like a drum. 
+            We can make it quieter or louder, but to get percussion we are 
+            going to need some more character knobs.
+          </p>
+          <p>
+            Lets put a hold setting on the random value. The hold decides how many samples
+            reuse the same random number. If the hold is <code>4</code>, we reuse the same
+            random value 4 times before picking a new one. Then we play the new one for 4 samples, etc etc. 
+            A small hold sounds more like pure noise where every sample is different. A big hold is
+            lower resolution and chunkier, like we zoomed in on the noise and played it back
+            blockier.
+          </p>
+          <pre><code class="language-python">import random
 
-        <section class="chapter-panel">
-          <p>
-            See thats already pretty good for noise, but it doesnt really give us a lot of
-            character knobs. We can make it quieter or louder, and we can fade it in or out,
-            but thats about it.
-          </p>
-          <p>
-            The Game Boy does not ask Python for a true random number. It has a tiny bit
-            machine. That sounds worse, but its useful: the hardware can run it cheap, and the
-            noise has knobs. You can clock it faster or slower, so the noise gets brighter,
-            duller, tighter, or chunkier.
-          </p>
-        </section>
-
-        <section class="chapter-panel">
-          <p>
-            The bit machine is called an LFSR. That stands for linear feedback shift
-            register. Gross name. It just means we keep one integer around, pull some bits
-            out of it, combine them, shift the integer over, and feed the new bit back in.
-            That gives us a long stream of high/low offsets that feels noisy.
-          </p>
-          <p>
-            The useful knobs are the clock speed, the feedback tap, and the volume shape.
-            Clock speed changes how often the noise value updates. Feedback tap changes the
-            pattern of bits. Volume shape decides whether it is a constant hiss or a little
-            hit that dies away.
-          </p>
-          <pre><code class="language-python">sample_rate = 44100
-seconds = 0.8
-volume = 0.30
-num_samples = int(seconds * sample_rate)
+volume = 0.18
+num_samples = 32
+hold = 4  # this is the character knob we just added
 
 samples = []
-
-timer = 0
-current_offset = 1
-noise_clock_hz = 5000
-feedback_tap = 1
-lfsr = 0b111_1111_1111_1111
+current_random_value = 0
 
 for sample_index in range(num_samples):
-    # Audio samples still happen 44,100 times per second.
-    timer = timer + 1 / sample_rate
+    # Every 4 samples, choose a new random offset.
+    if sample_index % hold == 0:
+        current_random_value = random.uniform(-1, 1)
 
-    # But the noise bit only changes when this clock ticks.
-    # Higher clock = brighter fizz.
-    # Lower clock = rougher chunk.
-    if timer >= 1 / noise_clock_hz:
-        timer = timer - 1 / noise_clock_hz
-
-        # Take two bits from the register.
-        # XOR them together.
-        # That result becomes the new incoming bit.
-        bit = (lfsr ^ (lfsr >> feedback_tap)) & 1
-
-        # Shift everything one slot to the right,
-        # then put the new bit back on the left.
-        lfsr = (lfsr >> 1) | (bit << 14)
-
-        # The bottom bit becomes our speaker offset.
-        current_offset = -1 if lfsr & 1 else 1
-
-    # Constant noise is just hiss.
-    # Fade it down and now it starts acting like a tiny drum hit.
-    time = sample_index / sample_rate
-    fade = max(0, 1 - time / 0.45)
-
-    sample = current_offset * volume * fade
+    sample = current_random_value * volume
     samples.append(sample)</code></pre>
-          <div class="code-actions">
-            <button data-play="noise" data-status="#noiseStatus">Play Bit Machine Noise</button>
-            <button data-play="noise-low" data-status="#noiseStatus">Lower Clock</button>
-            <button data-play="noise-bright" data-status="#noiseStatus">Higher Clock</button>
-            <button data-play="noise-short" data-status="#noiseStatus">Different Tap</button>
-            <button data-play="noise-click" data-status="#noiseStatus">Tiny Click</button>
-          </div>
-          <p id="noiseStatus" class="status-line" aria-live="polite"></p>
-        </section>
+          <p>Heres some sample lists made with different hold settings.</p>
+          <pre><code class="language-python"># hold = 0
+# Nothing ever asks random for a new value.
+# This is useless for noise. It is just flat.
+[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ...]
 
-        <section class="chapter-panel">
+# hold = 1
+# Every sample gets a new random value.
+[0.8, -0.3, 0.1, -0.9, 0.4, 0.6, -0.2, -0.7, ...]
+
+# hold = 2
+# Pick one random value, hold it for 2 samples, then pick another.
+[0.8, 0.8, -0.3, -0.3, 0.1, 0.1, -0.9, -0.9,
+ 0.4, 0.4, 0.6, 0.6, -0.2, -0.2, -0.7, -0.7, ...]
+
+# hold = 4
+# Pick one random value, hold it for 4 samples, then pick another.
+[0.8, 0.8, 0.8, 0.8, -0.3, -0.3, -0.3, -0.3,
+ 0.1, 0.1, 0.1, 0.1, -0.9, -0.9, -0.9, -0.9, ...]</code></pre>
           <p>
-            Heres the bit machine actually doing the thing. The line picks two bit slots,
-            XORs them into a new bit, the register shifts right, and the bottom bit becomes
-            the next high/low sample.
+            You can do this continuously too.
           </p>
-          <div class="lfsr-demo-grid">
-            <article>
-              <canvas data-lfsr-visual="normal" aria-label="Normal LFSR noise animation"></canvas>
-              <div class="code-actions">
-                <button data-play="noise" data-status="#noiseVariantStatus">Play Normal</button>
-              </div>
-            </article>
-            <article>
-              <canvas data-lfsr-visual="low" aria-label="Lower clock LFSR noise animation"></canvas>
-              <div class="code-actions">
-                <button data-play="noise-low" data-status="#noiseVariantStatus">Play Lower Clock</button>
-              </div>
-            </article>
-            <article>
-              <canvas data-lfsr-visual="bright" aria-label="Higher clock LFSR noise animation"></canvas>
-              <div class="code-actions">
-                <button data-play="noise-bright" data-status="#noiseVariantStatus">Play Higher Clock</button>
-              </div>
-            </article>
-            <article>
-              <canvas data-lfsr-visual="short" aria-label="Different tap LFSR noise animation"></canvas>
-              <div class="code-actions">
-                <button data-play="noise-short" data-status="#noiseVariantStatus">Play Different Tap</button>
-              </div>
-            </article>
-          </div>
-          <p id="noiseVariantStatus" class="status-line" aria-live="polite"></p>
-        </section>
+          <pre><code class="language-python">import random
 
-        <section class="chapter-panel">
-          <div class="wave-shape-toy lfsr-toy">
+hold = 4
+volume = 0.18
+
+current_random_value = 0
+samples_until_next_random_value = 0
+
+while True:
+    if samples_until_next_random_value == 0:
+        current_random_value = random.uniform(-1, 1)
+        samples_until_next_random_value = hold
+    offset = current_random_value * volume
+    samples_until_next_random_value -= 1
+
+    play_one_sample(offset)
+  </code></pre>
+          <p>
+            That sounds like this. You'll likely instantly find this sound familiar if you're old.
+            Adjust the hold setting to get a feel for how it changes the sound.
+          </p>
+          <div class="wave-shape-toy random-noise-toy">
             <div class="toy-badge" aria-hidden="true">
               <span>GAY BOY</span>
             </div>
             <div class="wave-shape-toy-body">
               <figure class="sample-diagram">
-                <canvas data-lfsr-toy aria-label="LFSR noise toy"></canvas>
-                <figcaption>Move the knobs. The register animation changes, and the generated noise changes with it.</figcaption>
+                <canvas data-random-noise-toy aria-label="Held random noise toy"></canvas>
+                <figcaption>Hold reuses each random value for a few samples. Move it while the sound plays.</figcaption>
               </figure>
-              <div class="wave-controls" data-lfsr-controls>
+              <div class="wave-controls" data-random-noise-controls>
                 <label>
-                  Clock
-                  <output data-lfsr-output="clock">5000 Hz</output>
-                  <input type="range" min="300" max="14000" step="100" value="5000" data-lfsr-control="clock" />
-                </label>
-                <label>
-                  Tap
-                  <output data-lfsr-output="tap">1</output>
-                  <input type="range" min="1" max="7" step="1" value="1" data-lfsr-control="tap" />
+                  Hold
+                  <output data-random-noise-output="hold">9 samples</output>
+                  <input type="range" min="1" max="512" step="1" value="9" data-random-noise-control="hold" />
                 </label>
                 <label>
                   Volume
-                  <output data-lfsr-output="volume">0.30</output>
-                  <input type="range" min="0.05" max="0.55" step="0.01" value="0.30" data-lfsr-control="volume" />
+                  <output data-random-noise-output="volume">0.22</output>
+                  <input type="range" min="0.05" max="0.60" step="0.01" value="0.22" data-random-noise-control="volume" />
+                </label>
+              </div>
+              <div class="code-actions">
+                <button data-random-noise-play>Play Live Held Random</button>
+              </div>
+            </div>
+          </div>
+          <p>
+            You can see how a higher hold setting feels like a lower pitch sound, and a lower
+            hold setting feels like a higher pitch sound. Thats because we are changing the
+            offset every <code>n</code> samples. At <code>44100</code> samples per second,
+            <code>hold = 169</code> changes the value about <code>44100 / 169</code> times
+            per second, which is <code>260.95 Hz</code>. Thats close to middle C on a piano,
+            which is about <code>261.63 Hz</code>. 
+
+            Notes can show up in unexpected places. 
+          </p>
+          <pre><code class="language-python">sample_rate = 44100
+
+note_names = [
+    "C", "C#", "D", "D#", "E", "F",
+    "F#", "G", "G#", "A", "A#", "B",
+]
+
+# make the note -> freq lut
+note_frequency = {}
+
+for midi_note in range(60, 73):  # C4 through C5
+    name = note_names[midi_note % 12]
+    octave = (midi_note // 12) - 1
+    note_name = f"{name}{octave}"
+
+    semitones_from_a4 = midi_note - 69
+    frequency = 440 * (2 ** (semitones_from_a4 / 12))
+
+    note_frequency[note_name] = frequency
+
+print(note_frequency["C4"])  # 261.625565...
+
+
+# make the note freq -> equivalent hold value lut
+note_hold = {}
+
+for note_name, frequency in note_frequency.items():
+    hold = round(sample_rate / frequency)
+    note_hold[note_name] = hold
+
+print(note_hold["C4"])  # 169
+print(note_hold["A4"])  # 100
+
+
+buttons = [
+    "C4", "C#4", "D4", "D#4", "E4", "F4",
+    "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5",
+]
+
+for note_name in buttons:
+    hold = note_hold[note_name]
+    print(note_name, "uses hold", hold)</code></pre>
+          <div class="note-hold-table" aria-label="Note frequency to hold lookup">
+            <div><strong>Note</strong><strong>Frequency</strong><strong>Hold</strong></div>
+            <div><span>C4</span><span>261.63 Hz</span><span>169</span></div>
+            <div><span>C#4</span><span>277.18 Hz</span><span>159</span></div>
+            <div><span>D4</span><span>293.66 Hz</span><span>150</span></div>
+            <div><span>D#4</span><span>311.13 Hz</span><span>142</span></div>
+            <div><span>E4</span><span>329.63 Hz</span><span>134</span></div>
+            <div><span>F4</span><span>349.23 Hz</span><span>126</span></div>
+            <div><span>F#4</span><span>369.99 Hz</span><span>119</span></div>
+            <div><span>G4</span><span>392.00 Hz</span><span>113</span></div>
+            <div><span>G#4</span><span>415.30 Hz</span><span>106</span></div>
+            <div><span>A4</span><span>440.00 Hz</span><span>100</span></div>
+            <div><span>A#4</span><span>466.16 Hz</span><span>95</span></div>
+            <div><span>B4</span><span>493.88 Hz</span><span>89</span></div>
+            <div><span>C5</span><span>523.25 Hz</span><span>84</span></div>
+          </div>
+          <div class="noise-piano" aria-label="Held noise piano">
+            <div class="noise-piano-keys">
+              <button class="white-key" data-noise-piano-note="C4"><span>C4</span><small>169</small></button>
+              <button class="black-key black-key-1" data-noise-piano-note="C#4"><span>C#4</span><small>159</small></button>
+              <button class="white-key" data-noise-piano-note="D4"><span>D4</span><small>150</small></button>
+              <button class="black-key black-key-2" data-noise-piano-note="D#4"><span>D#4</span><small>142</small></button>
+              <button class="white-key" data-noise-piano-note="E4"><span>E4</span><small>134</small></button>
+              <button class="white-key" data-noise-piano-note="F4"><span>F4</span><small>126</small></button>
+              <button class="black-key black-key-4" data-noise-piano-note="F#4"><span>F#4</span><small>119</small></button>
+              <button class="white-key" data-noise-piano-note="G4"><span>G4</span><small>113</small></button>
+              <button class="black-key black-key-5" data-noise-piano-note="G#4"><span>G#4</span><small>106</small></button>
+              <button class="white-key" data-noise-piano-note="A4"><span>A4</span><small>100</small></button>
+              <button class="black-key black-key-6" data-noise-piano-note="A#4"><span>A#4</span><small>95</small></button>
+              <button class="white-key" data-noise-piano-note="B4"><span>B4</span><small>89</small></button>
+              <button class="white-key" data-noise-piano-note="C5"><span>C5</span><small>84</small></button>
+            </div>
+          </div>
+          <p>
+            Lets add a fade out mechanic so our noise based sounds appear to trail off like real sounds. 
+          </p>
+          <pre><code class="language-python">import random
+
+sample_rate = 44100
+seconds = 0.7
+volume = 0.24
+hold = 28
+
+num_samples = int(seconds * sample_rate)
+samples = []
+
+current_random_value = 0
+samples_until_next_random_value = 0
+
+for sample_index in range(num_samples):
+    if samples_until_next_random_value == 0:
+        current_random_value = random.uniform(-1, 1)
+        samples_until_next_random_value = hold
+
+    time = sample_index / sample_rate
+    fade = max(0, 1 - time / seconds)
+
+    offset = current_random_value * volume * fade
+    samples.append(offset)
+
+    samples_until_next_random_value -= 1</code></pre>
+          <div class="wave-shape-toy random-noise-toy">
+            <div class="toy-badge" aria-hidden="true">
+              <span>GAY BOY</span>
+            </div>
+            <div class="wave-shape-toy-body">
+              <figure class="sample-diagram">
+                <canvas data-faded-noise-toy aria-label="Faded held noise toy"></canvas>
+                <figcaption>Fade multiplies the same held offsets by a shrinking volume.</figcaption>
+              </figure>
+              <div class="wave-controls" data-faded-noise-controls>
+                <label>
+                  Hold
+                  <output data-faded-noise-output="hold">28 samples</output>
+                  <input type="range" min="1" max="512" step="1" value="28" data-faded-noise-control="hold" />
+                </label>
+                <label>
+                  Volume
+                  <output data-faded-noise-output="volume">0.24</output>
+                  <input type="range" min="0.05" max="0.60" step="0.01" value="0.24" data-faded-noise-control="volume" />
                 </label>
                 <label>
                   Fade
-                  <output data-lfsr-output="fade">0.45s</output>
-                  <input type="range" min="0.05" max="1.00" step="0.01" value="0.45" data-lfsr-control="fade" />
+                  <output data-faded-noise-output="fade">0.28s</output>
+                  <input type="range" min="0.04" max="1.20" step="0.01" value="0.28" data-faded-noise-control="fade" />
                 </label>
               </div>
               <div class="code-actions">
-                <button data-lfsr-play>Play Toy Noise</button>
+                <button data-faded-noise-play>Play Faded Held Noise</button>
               </div>
             </div>
           </div>
-        </section>
+          <p class="spaced-note">You can see how we can make varied sound effects with this tool.</p>
+          <pre><code class="language-python">import random
+import time
 
-        <section class="chapter-panel">
-          <p>
-            Thats basically the point of the Game Boy noise channel. Channel 4 does not play
-            normal melody notes like the pulse channels. It clocks this little LFSR thing and
-            turns the bit stream into high/low offsets. The clock settings are the character
-            knobs. Not magic. Just tunable trash.
-          </p>
-          <p>
-            The real Game Boy exposes those knobs through its noise registers. You do not send
-            it a huge list of random samples. You set parameters like clock rate, width mode,
-            and envelope, and the chip spits out the noisy high/low stream for you.
-          </p>
-        </section>
-
-        <section class="chapter-panel">
-          <p>
-            But in software we are not stuck with the Game Boy circuit. XOR is special because
-            it tends to make long useful bit patterns. But you can put other little logic
-            functions in the feedback path and listen to the machine get weird, collapse,
-            buzz, or turn into a different texture.
-          </p>
-          <pre><code class="language-python">def feedback(mode, a, b, c):
-    if mode == "xor":
-        return a ^ b
-    if mode == "nand":
-        return 1 - (a & b)
-    if mode == "xor_or":
-        return (a ^ b) | c
-    if mode == "majority":
-        return 1 if a + b + c >= 2 else 0
-    if mode == "parity3":
-        return a ^ b ^ c
+sample_rate = 44100
 
 
-new_bit = feedback(mode, bit_0, bit_tap_a, bit_tap_b)
-register = (register >> 1) | (new_bit << (length - 1))</code></pre>
-          <div class="noise-preset-list">
-            <button data-feedback-play data-mode="xor" data-length="15" data-tap-a="1" data-tap-b="6" data-clock="5000">xor / 15 / taps 1,6</button>
-            <button data-feedback-play data-mode="nand" data-length="15" data-tap-a="1" data-tap-b="6" data-clock="5000">nand / 15 / taps 1,6</button>
-            <button data-feedback-play data-mode="xor_or" data-length="15" data-tap-a="2" data-tap-b="9" data-clock="6500">xor_or / 15 / taps 2,9</button>
-            <button data-feedback-play data-mode="majority" data-length="15" data-tap-a="3" data-tap-b="8" data-clock="4500">majority / 15 / taps 3,8</button>
-            <button data-feedback-play data-mode="parity3" data-length="23" data-tap-a="5" data-tap-b="17" data-clock="9000">parity3 / 23 / taps 5,17</button>
-          </div>
-        </section>
+def noise(sample_index, sample_rate, state, hold, volume):
+    if sample_index % hold == 0:
+        state[0] = random.uniform(-volume, volume)
 
-        <section class="chapter-panel">
-          <p>
-            Then theres the other chain of thought. What if the register is not bits. What if
-            it is a row of smooth numbers, and the feedback function is something soft like
-            <code>tanh</code>, <code>sin</code>, or a folded curve. Now it is not a Game Boy
-            noise channel anymore. Its a little procedural noise synth.
-          </p>
-          <pre><code class="language-python">def soft_xor(a, b, c, drive):
-    return tanh((a - b) * drive)
+    return state[0]
 
 
-def sine_mix(a, b, c, drive):
-    return sin(a * drive + b * drive * 0.7 + c * drive * 0.35)
+hold = 28
+volume = 0.24
+fade_seconds = 0.22
+hit_seconds = 0.28
 
+random_hold_delta = 18
+random_fade_delta = 0.10
+repeat_rate = 0.24
 
-new_value = feedback(a, b, c, drive)
-state = [new_value] + state[:-1]
-sample = state[-1]</code></pre>
-          <div class="wave-shape-toy lfsr-toy">
+while True:
+    this_hold = hold + random.randint(-random_hold_delta, random_hold_delta)
+    this_hold = max(1, this_hold)
+
+    this_fade = fade_seconds + random.uniform(-random_fade_delta, random_fade_delta)
+    this_fade = max(0.04, this_fade)
+
+    samples = render(noise, hit_seconds, this_fade, [this_hold, volume])
+
+    play(samples)
+    time.sleep(repeat_rate)</code></pre>
+          <div class="wave-shape-toy random-noise-toy varied-noise-toy">
             <div class="toy-badge" aria-hidden="true">
               <span>GAY BOY</span>
             </div>
             <div class="wave-shape-toy-body">
-              <figure class="sample-diagram">
-                <canvas data-continuous-toy aria-label="Continuous shift register toy"></canvas>
-                <figcaption>Same shift-register idea, but every slot holds a smooth number instead of one bit.</figcaption>
-              </figure>
-              <div class="wave-controls continuous-controls" data-continuous-controls>
+              <div class="wave-controls varied-noise-controls" data-varied-noise-controls>
                 <label>
-                  Function
-                  <output data-continuous-output="mode">soft_xor</output>
-                  <select data-continuous-control="mode">
-                    <option value="soft_xor">soft_xor</option>
-                    <option value="soft_and">soft_and</option>
-                    <option value="soft_or">soft_or</option>
-                    <option value="sine_mix">sine_mix</option>
-                    <option value="fold">fold</option>
-                    <option value="logistic">logistic</option>
-                  </select>
-                </label>
-                <label>
-                  Length
-                  <output data-continuous-output="length">32</output>
-                  <input type="range" min="8" max="64" step="1" value="32" data-continuous-control="length" />
-                </label>
-                <label>
-                  Tap A
-                  <output data-continuous-output="tapA">5</output>
-                  <input type="range" min="1" max="31" step="1" value="5" data-continuous-control="tapA" />
-                </label>
-                <label>
-                  Tap B
-                  <output data-continuous-output="tapB">17</output>
-                  <input type="range" min="1" max="31" step="1" value="17" data-continuous-control="tapB" />
-                </label>
-                <label>
-                  Drive
-                  <output data-continuous-output="drive">2.80</output>
-                  <input type="range" min="0.20" max="8.00" step="0.05" value="2.80" data-continuous-control="drive" />
-                </label>
-                <label>
-                  Clock
-                  <output data-continuous-output="clock">9000 Hz</output>
-                  <input type="range" min="300" max="18000" step="100" value="9000" data-continuous-control="clock" />
+                  Hold
+                  <output data-varied-noise-output="hold">28 samples</output>
+                  <input type="range" min="1" max="512" step="1" value="28" data-varied-noise-control="hold" />
                 </label>
                 <label>
                   Volume
-                  <output data-continuous-output="volume">0.30</output>
-                  <input type="range" min="0.05" max="0.70" step="0.01" value="0.30" data-continuous-control="volume" />
+                  <output data-varied-noise-output="volume">0.24</output>
+                  <input type="range" min="0.05" max="0.60" step="0.01" value="0.24" data-varied-noise-control="volume" />
+                </label>
+                <label>
+                  Fade
+                  <output data-varied-noise-output="fade">0.22s</output>
+                  <input type="range" min="0.04" max="1.20" step="0.01" value="0.22" data-varied-noise-control="fade" />
+                </label>
+                <label>
+                  Random Hold Delta
+                  <output data-varied-noise-output="holdDelta">+/-18</output>
+                  <input type="range" min="0" max="420" step="1" value="18" data-varied-noise-control="holdDelta" />
+                </label>
+                <label>
+                  Random Fade Delta
+                  <output data-varied-noise-output="fadeDelta">+/-0.10s</output>
+                  <input type="range" min="0" max="0.80" step="0.01" value="0.10" data-varied-noise-control="fadeDelta" />
+                </label>
+                <label>
+                  Repeat Rate
+                  <output data-varied-noise-output="repeat">0.24s</output>
+                  <input type="range" min="0.03" max="1.00" step="0.01" value="0.24" data-varied-noise-control="repeat" />
                 </label>
               </div>
+              <div class="noise-preset-list varied-noise-presets">
+                <button data-varied-noise-preset data-hold="2" data-volume="0.14" data-fade="0.025" data-hold-delta="0" data-fade-delta="0.00" data-repeat="0.03">motor</button>
+                <button data-varied-noise-preset data-hold="160" data-volume="0.30" data-fade="0.10" data-hold-delta="140" data-fade-delta="0.04" data-repeat="0.12">ominous room</button>
+                <button data-varied-noise-preset data-hold="500" data-volume="0.26" data-fade="0.08" data-hold-delta="12" data-fade-delta="0.02" data-repeat="0.07">before the earthquake</button>
+                <button data-varied-noise-preset data-hold="32" data-volume="0.42" data-fade="0.70" data-hold-delta="8" data-fade-delta="0.28" data-repeat="0.72">stepping monster</button>
+                <button data-varied-noise-preset data-hold="72" data-volume="0.52" data-fade="0.035" data-hold-delta="70" data-fade-delta="0.015" data-repeat="0.20">walking</button>
+                <button data-varied-noise-preset data-hold="220" data-volume="0.24" data-fade="0.18" data-hold-delta="210" data-fade-delta="0.16" data-repeat="0.045">burning building collapse</button>
+              </div>
               <div class="code-actions">
-                <button data-continuous-play>Play Continuous Noise</button>
+                <button data-varied-noise-play>Repeat Varied Hits</button>
               </div>
             </div>
           </div>
         </section>
+        
+        <p>
+          Dial the params in to get drums, and cymbals.
+        </p>
       </section>
 
       <section class="next-links">
         <a href="index.html">Back to index</a>
-        <a href="05-composition.html">Next: Composition</a>
+        <a href="05-composition.html">Next: Bottling It Up</a>
       </section>
     </main>
 

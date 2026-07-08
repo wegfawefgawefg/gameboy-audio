@@ -21,3 +21,9 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Local scratch media used while writing the tutorial.
+website/local-media/
+/*.mid
+/*.mp4
+/*.wav

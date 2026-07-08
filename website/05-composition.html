@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Composition - Game Boy Audio</title>
+    <title>Bottling It Up - Game Boy Audio</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -12,56 +12,293 @@
       <a class="site-title" href="index.html">How to code GameBoy music.</a>
       <section class="intro intro-title-only">
         <div>
-          <h1>A tiny composition is voices plus noise hits.</h1>
+          <h1>Bottling It Up</h1>
         </div>
       </section>
 
       <section class="chapter">
         <section class="chapter-panel">
-          <h2>Spelled Out</h2>
-          <pre><code class="language-python">num_samples = int(1.8 * sample_rate)
-
-samples = []
-for _ in range(num_samples):
-    samples.append(0)
-# Start with silence: one zero offset for every sample slot.
-
-melody = [
-    (523.25, 0.00, 0.16),  # C5
-    (659.25, 0.20, 0.16),  # E5
-    (392.00, 0.40, 0.16),  # G4
-    (523.25, 0.60, 0.28),  # C5
-]
-
-bass = [
-    (261.63, 0.00, 0.38),  # C4
-    (392.00, 0.40, 0.38),  # G4
-    (261.63, 0.80, 0.38),  # C4
-]
-
-for frequency, start, duration in melody:
-    add_pulse_note(samples, frequency, start, duration, volume=0.17, duty=0.5)
-
-for frequency, start, duration in bass:
-    add_pulse_note(samples, frequency, start, duration, volume=0.14, duty=0.25)
-
-for start in [0.00, 0.40, 0.80]:
-    add_noise_hit(samples, start, duration=0.08, volume=0.25)</code></pre>
-          <div class="code-actions">
-            <button data-play="composition" data-status="#compositionStatus">Play Composition</button>
-          </div>
-          <p id="compositionStatus" class="status-line" aria-live="polite"></p>
+          <p>
+            Up to this point we had one off scripts and sketches, but if you want to bottle
+            this up so you can add voices, make music, and do less plumbing, then this might
+            be a way you could do it.
+          </p>
+          <p>
+            I am not a big fan of OOP and complicated code. I like structs and functions.
+            I think this is pretty bland and you could recreate it in any language. Not
+            saying you have to do it like this, but this is my personal preference since I have 
+            a small brain. (Also it makes for better teaching material if anybody can follow along in any language.)
+          </p>
         </section>
 
         <section class="chapter-panel">
-          <h2>What Changed?</h2>
-          <p>Nothing magic. We are still filling one output list with offsets. The difference is that multiple little generators add into the same list: melody, bass, and noise hits.</p>
+          <p>
+            Lets put the note -> freq look up table in a file with the note consts.
+          </p>
+          <pre><code class="language-python"># notes.py
+
+names = ["C", "C#", "D", "D#", "E", "F",
+         "F#", "G", "G#", "A", "A#", "B"]
+
+# Build the note name -> frequency lookup table.
+note_freq = {}
+for midi_note in range(24, 96):
+    name = names[midi_note % 12]
+    octave = (midi_note // 12) - 1
+    frequency = 440 * (2 ** ((midi_note - 69) / 12))
+    note_freq[name + str(octave)] = frequency
+
+C3 = "C3"
+D3 = "D3"
+E3 = "E3"
+F3 = "F3"
+G3 = "G3"
+A3 = "A3"
+AS3 = "A#3"
+
+C4 = "C4"
+D4 = "D4"
+E4 = "E4"
+F4 = "F4"
+G4 = "G4"</code></pre>
+          <p>
+            And you can put your voices in another file.
+          </p>
+          <pre><code class="language-python"># voices.py
+
+import random
+
+from notes import note_freq
+
+
+def square(sample_index, sample_rate, state, note, duty, volume):
+    frequency = note_freq[note]
+    time = sample_index / sample_rate
+    phase = (time * frequency) % 1
+
+    if phase < duty:
+        return volume
+
+    return -volume
+
+
+def noise(sample_index, sample_rate, state, hold, volume):
+    if sample_index % hold == 0:
+        state[0] = random.uniform(-1, 1)
+
+    return state[0] * volume</code></pre>
+          <p>
+            Next we'll make some utility functions we cant get away from: 
+          </p>
+          <ul>
+            <li>Taking a voice and params and spitting out a list of samples.</li>
+            <li>Compositing a list of samples into another larger buffer of samples.</li>
+          </ul>
+          <pre><code class="language-python"># audio_rendering.py
+
+sample_rate = 44100
+
+
+# Render one event into its own temporary sample list.
+def render(voice, seconds, fade, params):
+    num_samples = int(seconds * sample_rate)
+    state = [0]
+
+    samples = []
+    for i in range(num_samples):
+        value = voice(i, sample_rate, state, *params)
+        samples.append(value)
+
+    for i in range(num_samples):
+        percent_done = i / num_samples
+        fade_amount = (1 - percent_done) ** fade
+        samples[i] = samples[i] * fade_amount
+
+    return samples
+
+
+# Add a rendered sample list into the output list at a position.
+def add(output, rendered, start_sample):
+    needed_samples = start_sample + len(rendered)
+    while len(output) < needed_samples:
+        output.append(0)
+
+    for i in range(len(rendered)):
+        output[start_sample + i] += rendered[i]
+
+
+# Convert musical steps into samples, then render and add the event.
+# really this is here for convenience. 
+# You could just render by start position in seconds and length in seconds, 
+# but then you cant adjust the speed of the song. Youd have to go and hand edit every note start and length.
+# So we divide time up into units of beats, and work with that.
+# You can take this a step further to make it even more convenient later, but this is a start.
+def put(output, voice, start_step, length_steps, fade, params, step_seconds):
+    seconds = length_steps * step_seconds
+    start_sample = int(start_step * step_seconds * sample_rate)
+    rendered = render(voice, seconds, fade, params)
+    add(output, rendered, start_sample)
+
+
+# Render every track into one final output list.
+def render_song(song, step_seconds):
+    output = []
+
+    for track in song:
+        for voice, start, length, fade, *params in track:
+            put(output, voice, start, length, fade, params, step_seconds)
+
+    return output</code></pre>
+        </section>
+
+        <section class="chapter-panel">
+          <p>
+            Heres how youd use it.
+          </p>
+          <pre><code class="language-python">from audio import play
+from audio_rendering import render_song
+from notes import C3, C4, E3, E4
+from voices import noise, square
+
+bpm = 148
+step_seconds = 60 / bpm / 4
+
+# (voice, start, length, fade, ...voice_params)
+track_1 = [
+    (square, 0, 6, 0, E3, 0.50, 0.10),
+    (square, 8, 4, 0, C3, 0.50, 0.10),
+    (square, 12, 4, 0, E3, 0.50, 0.10),
+]
+
+track_2 = [
+    (square, 0, 6, 0, C4, 0.25, 0.12),
+    (square, 8, 10, 0, E4, 0.25, 0.12),
+]
+
+drum_track = [
+    (noise, 0, 12, 0.20, 42, 0.22),
+    (noise, 24, 1, 0.05, 8, 0.18),
+    (noise, 28, 1, 0.06, 18, 0.16),
+]
+
+song = [
+    track_1,
+    track_2,
+    drum_track,
+]
+
+samples = render_song(song, step_seconds)
+play(samples)</code></pre>
+          <p>
+            <code>step_seconds</code> is the grid size. <code>start</code> is the cursor
+            position on that grid.
+          </p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>Route 3 Sketch</h2>
+          <p>
+            And heres our Route 3 sketch made with our toolkit. Hover a tuple to see where
+            it lands. Click a tuple to hear just that note or drum hit.
+          </p>
+          <div class="route3-workbench">
+            <pre class="route3-code"><code><span class="py-keyword">from</span> notes <span class="py-keyword">import</span> A3, AS3, C3, C4, D3, D4, E3, E4, F3, F4, G3, G4
+
+<span class="py-comment"># (voice, start_step, length_steps, fade, ...voice_params)</span>
+<span class="py-name">track_1</span> = [
+    <span data-route3-event="route3-p1-0" tabindex="0">(square, 0, 6, 0, E3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-1" tabindex="0">(square, 6, 1, 0, D3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-2" tabindex="0">(square, 7, 1, 0, E3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-3" tabindex="0">(square, 8, 4, 0, C3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-4" tabindex="0">(square, 12, 4, 0, E3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-5" tabindex="0">(square, 16, 6, 0, C3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-6" tabindex="0">(square, 22, 1, 0, D3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-7" tabindex="0">(square, 23, 1, 0, E3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-8" tabindex="0">(square, 24, 2, 0, F3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-9" tabindex="0">(square, 26, 2, 0, G3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-10" tabindex="0">(square, 28, 2, 0, G3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-11" tabindex="0">(square, 30, 2, 0, A3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-12" tabindex="0">(square, 32, 8, 0, AS3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-13" tabindex="0">(square, 40, 8, 0, F3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-14" tabindex="0">(square, 48, 8, 0, D3, 0.50, 0.10)</span>,
+    <span data-route3-event="route3-p1-15" tabindex="0">(square, 56, 8, 0, F3, 0.50, 0.10)</span>,
+]
+
+<span class="py-name">track_2</span> = [
+    <span data-route3-event="route3-p2-0" tabindex="0">(square, 0, 6, 0, C4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-1" tabindex="0">(square, 6, 1, 0, G3, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-2" tabindex="0">(square, 7, 1, 0, C4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-3" tabindex="0">(square, 8, 10, 0, E4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-4" tabindex="0">(square, 18, 2, 0, G3, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-5" tabindex="0">(square, 20, 2, 0, C4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-6" tabindex="0">(square, 22, 2, 0, G4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-7" tabindex="0">(square, 24, 2, 0, F4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-8" tabindex="0">(square, 26, 2, 0, E4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-9" tabindex="0">(square, 28, 2, 0, D4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-10" tabindex="0">(square, 30, 2, 0, C4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-11" tabindex="0">(square, 32, 8, 0, D4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-12" tabindex="0">(square, 40, 8, 0, F4, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-13" tabindex="0">(square, 48, 8, 0, AS3, 0.25, 0.12)</span>,
+    <span data-route3-event="route3-p2-14" tabindex="0">(square, 56, 8, 0, A3, 0.25, 0.12)</span>,
+]
+
+<span class="py-name">drum_track</span> = [
+    <span data-route3-event="route3-n-0-0" tabindex="0">(noise, 0, 12, 0.20, 42, 0.22)</span>,
+    <span data-route3-event="route3-n-0-1" tabindex="0">(noise, 12, 2, 0.20, 42, 0.22)</span>,
+    <span data-route3-event="route3-n-0-2" tabindex="0">(noise, 14, 2, 0.06, 18, 0.16)</span>,
+    <span data-route3-event="route3-n-0-3" tabindex="0">(noise, 16, 4, 0.20, 42, 0.22)</span>,
+    <span data-route3-event="route3-n-0-4" tabindex="0">(noise, 20, 4, 0.20, 42, 0.22)</span>,
+    <span data-route3-event="route3-n-0-5" tabindex="0">(noise, 24, 1, 0.05, 8, 0.18)</span>,
+    <span data-route3-event="route3-n-0-6" tabindex="0">(noise, 25, 1, 0.05, 8, 0.18)</span>,
+    <span data-route3-event="route3-n-0-7" tabindex="0">(noise, 26, 1, 0.05, 8, 0.18)</span>,
+    <span data-route3-event="route3-n-0-8" tabindex="0">(noise, 27, 1, 0.05, 8, 0.18)</span>,
+    <span data-route3-event="route3-n-0-9" tabindex="0">(noise, 28, 1, 0.06, 18, 0.16)</span>,
+    <span data-route3-event="route3-n-0-10" tabindex="0">(noise, 29, 1, 0.06, 18, 0.16)</span>,
+    <span data-route3-event="route3-n-0-11" tabindex="0">(noise, 30, 1, 0.06, 18, 0.16)</span>,
+    <span data-route3-event="route3-n-0-12" tabindex="0">(noise, 31, 1, 0.06, 18, 0.16)</span>,
+]
+
+
+bpm = 148
+step_seconds = 60 / bpm / 4
+
+song = [
+    track_1,
+    track_2,
+    drum_track,
+]
+
+samples = render_song(song, step_seconds)
+play(samples)</code></pre>
+            <figure class="sample-diagram route3-visual route3-channel-visual">
+              <canvas data-composition-visual="route3-sketch-channels" aria-label="Route 3 sketch voice 1, voice 2, and noise channels"></canvas>
+              <canvas data-route3-zoom aria-label="Zoomed Route 3 sample waveforms"></canvas>
+              <figcaption>The top graph shows the three lanes. The skinny graph zooms in so you can see actual sample movement.</figcaption>
+            </figure>
+          </div>
+          <figure class="sample-diagram route3-mixed-visual">
+            <canvas data-composition-visual="route3-sketch-mixed" aria-label="Route 3 sketch combined waveform"></canvas>
+          </figure>
+          <div class="code-actions">
+            <button data-play="route3-sketch" data-status="#route3SketchStatus" data-visual="route3-sketch">Play Route 3 Sketch</button>
+            <button data-download-route3>Download Sketch</button>
+          </div>
+          <p id="route3SketchStatus" class="status-line" aria-live="polite"></p>
+        </section>
+
+        <section class="chapter-panel">
+          <h2>The Shape</h2>
+          <p>
+            Render one sound. Add it into the song. Repeat until the song is full. Thats
+            the whole machine.
+          </p>
         </section>
       </section>
 
       <section class="next-links">
         <a href="index.html">Back to index</a>
-        <a href="06-wavetable.html">Next: Wavetable</a>
+        <a href="bonus-lfsr.html">Bonus: Real Game Boy Noise: LFSR</a>
+        <a href="bonus-wavetable.html">Bonus: Sampling Real Sounds, And The Wavetable</a>
       </section>
     </main>
 
